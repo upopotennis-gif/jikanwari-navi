@@ -207,12 +207,20 @@ function range(s){
   }); return out;
 }
 
+// ---------- 月間行事予定を取り込んだ月だけ時間割を出す
+function isReady(ds){
+  const r = D.ready || []; if(!r.length) return true;
+  const m = ds.slice(0,7);
+  return r.includes(m) || m < r[0];
+}
+
 // ---------- 1日分を組み立てる
 function dayPlan(d){
   const ds = iso(d);
   const evs = D.events.filter(e => onDate(e, ds));
   const mine = evs.filter(e => forMe(e) && !isGroupEvent(e));
   const plan = { date:d, ds, notes:[], off:null, periods:[], after:[], jitei:'通常' };
+  if(!isReady(ds)){ plan.pending = true; plan.off = '準備中'; return plan; }
   mine.filter(e => e['種類']==='行事' || e['種類']==='連絡').forEach(e => plan.notes.push(e));
   const offEv = mine.find(e => e['種類']==='休み');
   let wd = d.getDay();
@@ -327,6 +335,11 @@ function render(){
 function dayHTML(p){
   let h = '';
   p.notes.forEach(e => h += `<div class="notice"><b>${esc(e['種類']==='連絡'?'連絡':'行事')}</b>　${esc(e['内容'])}${e['場所']?'（'+esc(e['場所'])+'）':''}</div>`);
+  if(p.pending){
+    h += `<div class="off"><div class="big">${p.date.getMonth()+1}月の時間割は準備中です</div>
+      <span class="nw">月間行事予定が出たら、</span><span class="nw">行事や特別時間割を入れて表示します。</span></div>`;
+    return h;
+  }
   if(p.off){
     h += `<div class="off"><div class="big">授業はありません</div>${esc(p.off)}
       ${nextSchoolDay(p.date) ? `<div style="margin-top:14px"><button class="btn primary" data-go="${iso(nextSchoolDay(p.date))}">次の授業日（${md(nextSchoolDay(p.date))}）を見る</button></div>` : ''}</div>`;
@@ -367,7 +380,7 @@ function dayHTML(p){
   h += afterHTML(p);
   return h;
 }
-function nextSchoolDay(d){ for(let i=1;i<=40;i++){ const x = addDays(d,i); if(!dayPlan(x).off) return x; } return null; }
+function nextSchoolDay(d){ for(let i=1;i<=40;i++){ const x = addDays(d,i); const p = dayPlan(x); if(p.pending) return null; if(!p.off) return x; } return null; }
 function plMissing(p){ return p.periods.some(x => x.need==='block' && !x.cut && !x.changed); }
 
 function afterHTML(p){
@@ -388,6 +401,7 @@ function weekHTML(mon){
   for(let i=0;i<5;i++){
     const p = dayPlan(addDays(mon,i));
     h += `<div class="d"><h3>${md(p.date)}（${WD[p.date.getDay()]}）${p.special?`<span class="badge">特別時間割</span>`:''}${p.notes.length?`<span class="badge">行事あり</span>`:''}</h3>`;
+    if(p.pending){ h += `<div class="muted">準備中（月間行事予定が出たら表示します）</div></div>`; continue; }
     if(p.off){ h += `<div class="muted">授業なし：${esc(p.off)}</div></div>`; continue; }
     p.notes.forEach(e => h += `<div class="muted">● ${esc(e['内容'])}</div>`);
     p.periods.forEach(x => {

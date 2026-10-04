@@ -364,6 +364,15 @@ def main():
             warn.append(f'予定.csv の日付が読めない: {r}')
             continue
         events.append({k: v for k, v in r.items() if v})
+    ready = []
+    p_ready = ROOT / '表示する月.txt'
+    if p_ready.exists():
+        for line in p_ready.read_text(encoding='utf-8').splitlines():
+            line = line.split('#')[0].strip()
+            if re.fullmatch(r'\d{4}-\d{2}', line):
+                ready.append(line)
+            elif line:
+                warn.append(f'表示する月.txt の行が読めない: {line}')
     data = {
         'year': '2026年度',
         'updated': datetime.date.today().isoformat(),
@@ -372,9 +381,10 @@ def main():
         'jitei': jitei,
         'events': events,
         'special': special,
+        'ready': sorted(ready),
     }
     (ROOT / 'data.js').write_text('window.DATA = ' + json.dumps(data, ensure_ascii=False, separators=(',', ':')) + ';\n', encoding='utf-8')
-    print(f'data.js を書き出しました（クラス {len(classes)}・選択群 {len(blocks)}・予定 {len(events)} 件・特別時間割 {len(special)} 日）')
+    print(f'data.js を書き出しました（クラス {len(classes)}・選択群 {len(blocks)}・予定 {len(events)} 件・特別時間割 {len(special)} 日・表示する月 {", ".join(ready)}）')
     for w in warn:
         print('  要確認:', w)
 
