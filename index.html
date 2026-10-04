@@ -199,7 +199,7 @@ function tokens(s){ return String(s||'全員').split(/[\s、,・]+/).filter(Bool
 function forMe(ev){ const mine = targets(); return tokens(ev['対象']).some(x => mine.includes(x)); }
 function onDate(ev, ds){ const a = ev['日付'], b = ev['まで'] || a; return a <= ds && ds <= b; }
 function myTags(){ return (prof && prof.tags) || []; }
-function isGroupEvent(ev){ return tokens(ev['対象']).some(x => /委員会$|部$|会$|係$/.test(x) && !['全員','全校'].includes(x)); }
+function isGroupEvent(ev){ return tokens(ev['対象']).some(x => /委員会$|部$|会$|係$|セミナー$/.test(x) && !['全員','全校'].includes(x)); }
 function range(s){
   const out = []; String(s||'').split(/[,、]/).forEach(p => {
     const m = p.match(/(\d)\s*[-〜~]\s*(\d)/); if(m){ for(let i=+m[1]; i<=+m[2]; i++) out.push(i); }
@@ -373,13 +373,13 @@ function plMissing(p){ return p.periods.some(x => x.need==='block' && !x.cut && 
 function afterHTML(p){
   const mine = p.after.filter(a => a.mine), other = p.after.filter(a => !a.mine);
   const row = a => `<div class="ev ${a.mine?'mine':''}"><div class="t">${esc(a.ev['時刻']||'放課後')}</div><div>
-      <div>${tokens(a.ev['対象']).filter(t=>!['全員','全校'].includes(t)).map(t=>`<span class="who">${esc(t)}</span>`).join('')}${esc(a.ev['内容'])}</div>
+      <div>${tokens(a.ev['対象']).filter(t=>!['全員','全校'].includes(t) && t!==a.ev['内容']).map(t=>`<span class="who">${esc(t)}</span>`).join('')}${esc(a.ev['内容'])}</div>
       ${a.ev['場所']?`<div class="w">${esc(a.ev['場所'])}</div>`:''}</div></div>`;
   let h = `<h2>放課後・委員会</h2>`;
   if(!p.after.length) return h + `<p class="muted">この日の予定は入っていません。</p>`;
   if(mine.length) h += `<div class="after">${mine.map(row).join('')}</div>`;
   else h += `<p class="muted">自分あての予定はありません。</p>`;
-  if(other.length) h += `<details class="more"><summary>ほかの委員会・部活の予定（${other.length}件）</summary><div class="after">${other.map(row).join('')}</div></details>`;
+  if(other.length) h += `<details class="more"><summary>ほかの委員会・活動の予定（${other.length}件）</summary><div class="after">${other.map(row).join('')}</div></details>`;
   return h;
 }
 
@@ -439,7 +439,7 @@ function classNeeds(cid){
 }
 function allTags(){
   const set = new Set();
-  D.events.forEach(e => tokens(e['対象']).forEach(t => { if(/委員会$|部$|係$/.test(t)) set.add(t); }));
+  D.events.forEach(e => tokens(e['対象']).forEach(t => { if(/委員会$|部$|会$|係$|セミナー$/.test(t)) set.add(t); }));
   return [...set].sort((a,b)=>a.localeCompare(b,'ja'));
 }
 
@@ -478,12 +478,12 @@ function drawSheet(){
       });
     }
     const tags = allTags();
-    h += `<h2>委員会・部活</h2>`;
+    h += `<h2>委員会・放課後の活動</h2>`;
     if(tags.length){
       h += `<p class="lead">選んだものは、放課後の予定でいちばん上に出ます（いくつでも）。</p><div class="chips">`;
       tags.forEach(t => h += `<button class="chip ${draft.tags.includes(t)?'sel':''}" data-tag="${esc(t)}">${esc(t)}</button>`);
       h += `</div>`;
-    } else h += `<p class="lead">委員会や部活の予定が入ると、ここで選べるようになります。</p>`;
+    } else h += `<p class="lead">委員会や活動の予定が入ると、ここで選べるようになります。</p>`;
   }
   body.innerHTML = h;
   body.querySelectorAll('[data-cls]').forEach(b => b.onclick = () => { if(draft.cls!==b.dataset.cls){ draft.cls = b.dataset.cls; } drawSheet(); });
