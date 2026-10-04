@@ -236,7 +236,7 @@ function dayPlan(d){
     const relevant = isMine || isGroupEvent(e);
     if(relevant) plan.after.push({ev:e, mine:isMine});
   });
-  plan.after.sort((a,b) => (b.mine - a.mine) || String(a.ev['時刻']||'').localeCompare(String(b.ev['時刻']||'')));
+  plan.after.sort((a,b) => String(a.ev['時刻']||'').localeCompare(String(b.ev['時刻']||'')));
   if(plan.off) return plan;
   const c = cls();
   const times = D.jitei[plan.jitei] || D.jitei['通常'] || [];
@@ -384,15 +384,12 @@ function nextSchoolDay(d){ for(let i=1;i<=40;i++){ const x = addDays(d,i); const
 function plMissing(p){ return p.periods.some(x => x.need==='block' && !x.cut && !x.changed); }
 
 function afterHTML(p){
-  const mine = p.after.filter(a => a.mine), other = p.after.filter(a => !a.mine);
   const row = a => `<div class="ev ${a.mine?'mine':''}"><div class="t">${esc(a.ev['時刻']||'放課後')}</div><div>
       <div>${tokens(a.ev['対象']).filter(t=>!['全員','全校'].includes(t) && t!==a.ev['内容']).map(t=>`<span class="who">${esc(t)}</span>`).join('')}${esc(a.ev['内容'])}</div>
       ${a.ev['場所']?`<div class="w">${esc(a.ev['場所'])}</div>`:''}</div></div>`;
   let h = `<h2>放課後・委員会</h2>`;
   if(!p.after.length) return h + `<p class="muted">この日の予定は入っていません。</p>`;
-  if(mine.length) h += `<div class="after">${mine.map(row).join('')}</div>`;
-  else h += `<p class="muted">自分あての予定はありません。</p>`;
-  if(other.length) h += `<details class="more"><summary>ほかの委員会・活動の予定（${other.length}件）</summary><div class="after">${other.map(row).join('')}</div></details>`;
+  h += `<div class="after">${p.after.map(row).join('')}</div>`;
   return h;
 }
 
@@ -407,8 +404,7 @@ function weekHTML(mon){
     p.periods.forEach(x => {
       h += `<div class="row ${x.cut?'cut':''} ${x.changed?'changed':''}" style="--c:${color(x.subj)}"><span class="n">${x.p}</span><span class="s">${x.subj?esc(x.subj):'―'}</span><span class="r">${x.cut?'なし':esc(x.room||'')}</span></div>`;
     });
-    const mine = p.after.filter(a => a.mine);
-    mine.forEach(a => h += `<div class="row"><span class="n">後</span><span class="s" style="--c:var(--accent)">${esc(a.ev['内容'])}</span><span class="r">${esc(a.ev['時刻']||'')}</span></div>`);
+    p.after.forEach(a => h += `<div class="row"><span class="n">後</span><span class="s" style="--c:var(--accent)">${esc(a.ev['内容'])}</span><span class="r">${esc(a.ev['時刻']||'')}</span></div>`);
     h += '</div>';
   }
   return h + '</div>';
@@ -451,11 +447,6 @@ function classNeeds(cid){
   blocks.sort((x,y) => order.indexOf(x) - order.indexOf(y));
   return {blocks, groups};
 }
-function allTags(){
-  const set = new Set();
-  D.events.forEach(e => tokens(e['対象']).forEach(t => { if(/委員会$|部$|会$|係$|セミナー$/.test(t)) set.add(t); }));
-  return [...set].sort((a,b)=>a.localeCompare(b,'ja'));
-}
 
 function drawSheet(){
   const body = document.getElementById('sheetBody');
@@ -491,19 +482,11 @@ function drawSheet(){
         h += `<button class="chip ${!draft.groups[s]?'sel':''}" data-grp="${esc(s)}" data-n="0">わからない</button></div></div>`;
       });
     }
-    const tags = allTags();
-    h += `<h2>委員会・放課後の活動</h2>`;
-    if(tags.length){
-      h += `<p class="lead">選んだものは、放課後の予定でいちばん上に出ます（いくつでも）。</p><div class="chips">`;
-      tags.forEach(t => h += `<button class="chip ${draft.tags.includes(t)?'sel':''}" data-tag="${esc(t)}">${esc(t)}</button>`);
-      h += `</div>`;
-    } else h += `<p class="lead">委員会や活動の予定が入ると、ここで選べるようになります。</p>`;
   }
   body.innerHTML = h;
   body.querySelectorAll('[data-cls]').forEach(b => b.onclick = () => { if(draft.cls!==b.dataset.cls){ draft.cls = b.dataset.cls; } drawSheet(); });
   body.querySelectorAll('[data-blk]').forEach(b => b.onclick = () => { draft.choices[b.dataset.blk] = b.dataset.opt; drawSheet(); });
   body.querySelectorAll('[data-grp]').forEach(b => b.onclick = () => { const n = +b.dataset.n; if(n) draft.groups[b.dataset.grp] = n; else delete draft.groups[b.dataset.grp]; drawSheet(); });
-  body.querySelectorAll('[data-tag]').forEach(b => b.onclick = () => { const t = b.dataset.tag; draft.tags = draft.tags.includes(t) ? draft.tags.filter(x=>x!==t) : [...draft.tags, t]; drawSheet(); });
   document.getElementById('saveBtn').disabled = !draft.cls;
 }
 function whenOf(cid, test){
