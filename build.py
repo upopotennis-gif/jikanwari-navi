@@ -10,6 +10,9 @@ source/ は公開しない（先生の名前が入っているため）。
 """
 import csv, json, re, sys, datetime, pathlib
 import openpyxl
+from collections import Counter
+from invert import invert, ALIAS
+from tokubetsu import parse_pdf
 
 ROOT = pathlib.Path(__file__).parent
 DAYS = '月火水木金'
@@ -228,6 +231,7 @@ def build_timetable(wb, warn):
             split = '(分割)' in subj
             subj = subj.replace('(分割)', '').strip()
             subj = re.sub(r'(現代の|科学と)(国語|人間生活)', r'\1\2', subj)
+            subj = ALIAS.get(subj, subj)
             # 教室: まず教室配当、なければルーム版の教室欄
             key = norm(subj)[:2]
             hits = lookup_assigned(by_slot, i, lambda n: code in n and '選択' not in n and n.startswith(key))
@@ -272,6 +276,70 @@ def build_timetable(wb, warn):
     return classes, blocks
 
 
+# ---------------------------------------------------------------- 特別時間割
+def bare(s):
+    return re.sub(r'[ⅠⅡⅢ]|\|.*', '', s)
+
+
+def build_special(classes, warn):
+    """source/tokubetsu/*.pdf（教員版）→ {日付: {note, periods, classes: {id: [7コマ]}}}
+    教室は載っていないので、ふだんの時間割で同じ科目が使う教室（いちばん多いもの）をあてる。"""
+    def room_for(cid, subj):
+        c = classes[cid]
+        for test in (lambda s: s == subj, lambda s: bare(s) == bare(subj), lambda s: s[:2] == subj[:2]):
+            cnt = Counter(json.dumps(e['rooms'], ensure_ascii=False) for e in c['slots'] if e and 'block' not in e and test(e['s']))
+            if cnt:
+                (best, n), total = cnt.most_common(1)[0], sum(cnt.values())
+                return json.loads(best), n < total
+        if subj in ('体育', '生涯スポーツ'):
+            return [[0, '体育施設']], False
+        if subj == '総合':
+            return [[0, '学年の指示どおり']], False
+        return [[0, 'いつもの教室']], False
+
+    def block_rooms(cid, blk):
+        cnt = Counter(json.dumps(e['rooms'], ensure_ascii=False) for e in classes[cid]['slots'] if e and e.get('block') == blk)
+        return json.loads(cnt.most_common(1)[0][0]) if cnt else {}
+
+    special = {}
+    for pdf in sorted((ROOT / 'source' / 'tokubetsu').glob('*.pdf')):
+        for date, day in parse_pdf(pdf)[0].items():
+            inv = invert(day['labels'])
+            per = {}
+            for cid in classes:
+                slots = [None] * 7
+                for p, ent in inv.get(cid, {}).items():
+                    if p > day['periods']:
+                        continue
+                    if ent[0] == 'block':
+                        if ent[1] not in BLOCKS:
+                            continue
+                        slots[p - 1] = {'block': ent[1], 'rooms': block_rooms(cid, ent[1])}
+                    else:
+                        names = [x.split('|')[0] for x in ent[1]]
+                        # 表記ゆれ（英コミュⅡ/Ⅲ など）はふだんの時間割の名前にそろえる
+                        base_names = {e['s'] for e in classes[cid]['slots'] if e and 'block' not in e}
+                        names = list(dict.fromkeys(next((b for b in base_names if bare(b) == bare(n)), n) if n not in base_names else n for n in names))
+                        note = 'Ⅱ選択' if any('|Ⅱ選択' in x for x in ent[1]) else ''
+                        rooms, varies = room_for(cid, names[0])
+                        e = {'s': ' / '.join(names), 'rooms': rooms}
+                        if note:
+                            e['note'] = note
+                        if len(names) > 1 and e['s'] not in base_names:
+                            e['conflict'] = True
+                            warn.append(f'特別 {date} {cid} {p}限: 案で重なり {e["s"]}')
+                        slots[p - 1] = e
+                # 途中のコマが空いているのは読みとり漏れかもしれない
+                filled_p = [i for i, x in enumerate(slots) if x]
+                if filled_p:
+                    gaps = [i + 1 for i in range(filled_p[0], filled_p[-1]) if not slots[i]]
+                    if gaps:
+                        warn.append(f'特別 {date} {cid}: {gaps}限が空き')
+                per[cid] = slots
+            special[date] = {'periods': day['periods'], 'src': '修学旅行特別時間割 ' + pdf.stem + '（第1案）', 'classes': per}
+    return special
+
+
 # ---------------------------------------------------------------- 予定・時程
 def read_csv(name):
     p = ROOT / name
@@ -286,6 +354,7 @@ def main():
     wb = openpyxl.load_workbook(ROOT / 'source' / 'jikanwari.xlsx', data_only=True)
     warn = []
     classes, blocks = build_timetable(wb, warn)
+    special = build_special(classes, warn)
     jitei = {}
     for r in read_csv('時程.csv'):
         jitei.setdefault(r['時程名'], []).append({'p': r['時限'], 'start': r['開始'], 'end': r['終了']})
@@ -302,9 +371,10 @@ def main():
         'blocks': blocks,
         'jitei': jitei,
         'events': events,
+        'special': special,
     }
     (ROOT / 'data.js').write_text('window.DATA = ' + json.dumps(data, ensure_ascii=False, separators=(',', ':')) + ';\n', encoding='utf-8')
-    print(f'data.js を書き出しました（クラス {len(classes)}・選択群 {len(blocks)}・予定 {len(events)} 件）')
+    print(f'data.js を書き出しました（クラス {len(classes)}・選択群 {len(blocks)}・予定 {len(events)} 件・特別時間割 {len(special)} 日）')
     for w in warn:
         print('  要確認:', w)
 

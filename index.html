@@ -232,8 +232,13 @@ function dayPlan(d){
   if(plan.off) return plan;
   const c = cls();
   const times = D.jitei[plan.jitei] || D.jitei['通常'] || [];
-  for(let p=1; p<=7; p++){
-    const slot = c.slots[(wd-1)*7 + (p-1)];
+  const sp = D.special && D.special[ds];
+  const spSlots = sp && sp.classes[prof.cls];
+  if(sp){ plan.special = sp;
+    const hasRep = mine.some(e => e['種類']==='差し替え');
+    if(!spSlots || (!spSlots.some(Boolean) && !hasRep)){ plan.off = plan.notes.length ? 'この日は授業がありません' : '特別時間割で授業がありません'; return plan; } }
+  for(let p=1; p<=(sp ? sp.periods : 7); p++){
+    const slot = sp ? spSlots[p-1] : c.slots[(wd-1)*7 + (p-1)];
     const tm = times.find(t => String(t.p)===String(p));
     const item = { p, time: tm ? tm.start+'〜'+tm.end : '', start: tm && tm.start, end: tm && tm.end };
     Object.assign(item, resolve(slot));
@@ -275,6 +280,7 @@ function resolve(slot){
     return {subj:b.label, tag:'', room:'', alts: b.options.join(' / '), need:'block'};
   }
   const rt = roomText(slot.rooms, slot.s);
+  if(slot.conflict) return {subj:slot.s, tag:'', room:'', alts:'時間割の案で2つの授業が重なっています。担任の連絡で確認してください', need:null};
   return {subj:slot.s, tag: slot.note || '', room:rt.room, alts:rt.alts, need: rt.needGroup ? 'group' : null};
 }
 
@@ -335,6 +341,7 @@ function dayHTML(p){
     const live = p.periods.filter(x => x.start && !x.cut);
     nowP = live.find(x => hm >= toMin(x.start)-10 && hm <= toMin(x.end));
   }
+  if(p.special) h += `<div class="notice info"><b>特別時間割</b>　${esc(p.special.src)}より。<span class="nw">教室はふだんの割り当てから出した目安です。</span></div>`;
   if(plMissing(p)) h += `<div class="notice info"><b>選択科目</b>　まだ選んでいない選択があります。<button class="set" data-open="1">設定する</button></div>`;
   h += '<div class="list">';
   const rows = [];
@@ -380,7 +387,7 @@ function weekHTML(mon){
   let h = '<div class="weekview">';
   for(let i=0;i<5;i++){
     const p = dayPlan(addDays(mon,i));
-    h += `<div class="d"><h3>${md(p.date)}（${WD[p.date.getDay()]}）${p.notes.length?`<span class="badge">行事あり</span>`:''}</h3>`;
+    h += `<div class="d"><h3>${md(p.date)}（${WD[p.date.getDay()]}）${p.special?`<span class="badge">特別時間割</span>`:''}${p.notes.length?`<span class="badge">行事あり</span>`:''}</h3>`;
     if(p.off){ h += `<div class="muted">授業なし：${esc(p.off)}</div></div>`; continue; }
     p.notes.forEach(e => h += `<div class="muted">● ${esc(e['内容'])}</div>`);
     p.periods.forEach(x => {
