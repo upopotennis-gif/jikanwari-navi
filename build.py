@@ -383,7 +383,13 @@ def main():
         'special': special,
         'ready': sorted(ready),
     }
-    (ROOT / 'data.js').write_text('window.DATA = ' + json.dumps(data, ensure_ascii=False, separators=(',', ':')) + ';\n', encoding='utf-8')
+    js = 'window.DATA = ' + json.dumps(data, ensure_ascii=False, separators=(',', ':')) + ';\n'
+    (ROOT / 'data.js').write_text(js, encoding='utf-8')
+    # 更新がすぐ届くよう、index.html の読みこみに版の印をつける（キャッシュ対策）
+    import hashlib
+    v = hashlib.sha1(js.encode()).hexdigest()[:10]
+    ih = ROOT / 'index.html'
+    ih.write_text(re.sub(r'<script src="data\.js[^"]*">', f'<script src="data.js?v={v}">', ih.read_text(encoding='utf-8')), encoding='utf-8')
     print(f'data.js を書き出しました（クラス {len(classes)}・選択群 {len(blocks)}・予定 {len(events)} 件・特別時間割 {len(special)} 日・表示する月 {", ".join(ready)}）')
     for w in warn:
         print('  要確認:', w)

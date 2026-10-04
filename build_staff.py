@@ -165,6 +165,11 @@ def main():
     b64 = lambda b: base64.b64encode(b).decode()
     OUT.mkdir(exist_ok=True)
     (OUT / 'data.enc.js').write_text('window.ENC = ' + json.dumps({'salt': b64(salt), 'iv': b64(iv), 'iter': ITER, 'ct': b64(ct)}) + ';\n', encoding='utf-8')
+    # 更新がすぐ届くよう、読みこむ側の index.html に版の印をつける（キャッシュ対策）
+    import hashlib
+    v = hashlib.sha1(ct).hexdigest()[:10]
+    ih = OUT / 'index.html'
+    ih.write_text(re.sub(r'<script src="data\.enc\.js[^"]*">', f'<script src="data.enc.js?v={v}">', ih.read_text(encoding='utf-8')), encoding='utf-8')
     print(f'data.enc.js を書き出しました（先生 {len(teachers)}・特別時間割 {len(special)} 日・月間行事 {len(staff_events)} 日・{len(ct)//1024} KB）')
 
 
