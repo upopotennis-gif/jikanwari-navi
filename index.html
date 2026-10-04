@@ -1,0 +1,517 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>時間割ナビ</title>
+<meta name="description" content="クラスと選択科目を選ぶと、その日の時間割と教室、行事や放課後の予定がわかります。">
+<meta name="theme-color" content="#0f766e">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230f766e'/%3E%3Cpath d='M16 20h32M16 32h32M16 44h20' stroke='white' stroke-width='6' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#f4f6f5; --card:#fff; --ink:#1c2422; --sub:#5b6663; --line:#e2e7e5;
+  --accent:#0f766e; --accent-soft:#e3f3f1; --warn:#b45309; --warn-soft:#fdf3e2;
+  --off:#9aa5a2; --off-bg:#eef1f0; --now:#f59e0b;
+  --c-koku:#dc2626; --c-sugaku:#1d4ed8; --c-eigo:#7c3aed; --c-rika:#15803d;
+  --c-chireki:#a16207; --c-tai:#0e7490; --c-gei:#be185d; --c-hr:#475569; --c-etc:#64748b;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#111615; --card:#1a2120; --ink:#e7eeec; --sub:#a2aeab; --line:#2b3533;
+    --accent:#2dd4bf; --accent-soft:#163532; --warn:#fbbf24; --warn-soft:#3a2e14;
+    --off:#6b7775; --off-bg:#202927; --now:#fbbf24;
+    --c-koku:#f87171; --c-sugaku:#60a5fa; --c-eigo:#a78bfa; --c-rika:#4ade80;
+    --c-chireki:#fbbf24; --c-tai:#22d3ee; --c-gei:#f472b6; --c-hr:#94a3b8; --c-etc:#94a3b8;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#111615; --card:#1a2120; --ink:#e7eeec; --sub:#a2aeab; --line:#2b3533;
+  --accent:#2dd4bf; --accent-soft:#163532; --warn:#fbbf24; --warn-soft:#3a2e14;
+  --off:#6b7775; --off-bg:#202927; --now:#fbbf24;
+  --c-koku:#f87171; --c-sugaku:#60a5fa; --c-eigo:#a78bfa; --c-rika:#4ade80;
+  --c-chireki:#fbbf24; --c-tai:#22d3ee; --c-gei:#f472b6; --c-hr:#94a3b8; --c-etc:#94a3b8;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 -apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif}
+button{font:inherit;color:inherit}
+.wrap{max-width:560px;margin:0 auto;padding:0 16px 48px}
+header{padding:12px 0 4px}
+.top{display:flex;align-items:center;gap:8px}
+.top h1{font-size:17px;margin:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.top h1 small{font-weight:normal;color:var(--sub);font-size:14px;margin-left:6px}
+.btn{min-height:44px;padding:0 14px;border-radius:12px;border:1px solid var(--line);background:var(--card);cursor:pointer;font-size:15px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+:root[data-theme="dark"] .btn.primary{color:#062a27}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .btn.primary{color:#062a27}}
+.datebar{display:flex;align-items:center;gap:8px;margin-top:10px}
+.datebar .arrow{width:44px;height:44px;border-radius:12px;border:1px solid var(--line);background:var(--card);font-size:18px;cursor:pointer;flex:none}
+.datebar .day{flex:1;text-align:center;font-weight:700;font-size:20px;white-space:nowrap}
+.datebar .day small{display:block;font-size:14px;font-weight:normal;color:var(--sub);line-height:1.2}
+.week{display:flex;gap:6px;margin-top:10px}
+.week button{flex:1;min-height:48px;border-radius:12px;border:1px solid var(--line);background:var(--card);cursor:pointer;line-height:1.15;font-size:15px;padding:4px 0}
+.week button small{display:block;font-size:14px;color:var(--sub)}
+.week button.sel{background:var(--accent);border-color:var(--accent);color:#fff}
+.week button.sel small{color:inherit;opacity:.9}
+:root[data-theme="dark"] .week button.sel{color:#062a27}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .week button.sel{color:#062a27}}
+.week button.today:not(.sel){border-color:var(--accent);color:var(--accent);font-weight:700}
+.week button.holiday:not(.sel){color:var(--off)}
+.tabs{display:flex;gap:6px;margin:12px 0 4px}
+.tabs button{flex:1;min-height:44px;border-radius:999px;border:1px solid var(--line);background:transparent;cursor:pointer;font-size:15px}
+.tabs button.sel{background:var(--ink);color:var(--bg);border-color:var(--ink);font-weight:600}
+.notice{border-radius:14px;padding:12px 14px;margin:10px 0;font-size:15px;background:var(--warn-soft);color:var(--ink);border-left:5px solid var(--warn)}
+.notice b{color:var(--warn)}
+.notice.info{background:var(--accent-soft);border-left-color:var(--accent)}
+.notice.info b{color:var(--accent)}
+.notice .set{display:inline-flex;align-items:center;min-height:44px;color:var(--accent);background:none;border:0;padding:0 4px;font-weight:700;cursor:pointer;font-size:15px;text-decoration:underline}
+.off{text-align:center;padding:36px 16px;background:var(--card);border-radius:16px;margin-top:10px;color:var(--sub)}
+.off .big{font-size:22px;font-weight:700;color:var(--ink);margin-bottom:4px}
+.list{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.period{display:flex;gap:12px;background:var(--card);border-radius:16px;padding:12px 14px;border:2px solid transparent;position:relative}
+.period .no{flex:none;width:44px;text-align:center}
+.period .no b{display:block;font-size:22px;line-height:1.1}
+.period .no small{display:block;font-size:14px;color:var(--sub);line-height:1.25;white-space:nowrap}
+.period .body{flex:1;min-width:0;border-left:4px solid var(--c);padding-left:12px}
+.period .subj{font-size:18px;font-weight:700;line-height:1.35;word-break:keep-all;overflow-wrap:anywhere}
+.period .subj .tag{font-size:14px;font-weight:normal;color:var(--sub);margin-left:6px;white-space:nowrap}
+.period .room{margin-top:4px;font-size:16px;display:flex;align-items:flex-start;gap:6px}
+.period .room svg{flex:none;margin-top:4px}
+.period .room b{font-size:18px}
+.period .alts{font-size:14px;color:var(--sub);margin-top:2px}
+.period .set{display:inline-flex;align-items:center;min-height:44px;margin-top:4px;color:var(--accent);background:none;border:0;padding:0;font-weight:600;cursor:pointer;font-size:15px;text-decoration:underline}
+.period.now{border-color:var(--now)}
+.period.now::after{content:"いまここ";position:absolute;top:-10px;right:12px;background:var(--now);color:#1c1300;font-size:14px;font-weight:700;padding:0 8px;border-radius:999px;line-height:20px}
+.period.cut{background:var(--off-bg)}
+.period.cut .subj{color:var(--off);text-decoration:line-through;font-weight:600}
+.period.cut.merged .subj{text-decoration:none}
+.period.cut .body{border-left-color:var(--off)}
+.period.cut .why{font-size:14px;color:var(--sub)}
+.period.changed .body{border-left-color:var(--warn)}
+.period.changed .why{font-size:14px;color:var(--sub)}
+.period.empty .subj{color:var(--off);font-weight:normal;font-size:16px}
+.break{font-size:14px;color:var(--sub);padding:2px 4px 2px 70px}
+h2{font-size:16px;margin:22px 0 4px;color:var(--sub)}
+.after{background:var(--card);border-radius:16px;padding:4px 14px}
+.after .ev{padding:10px 0;border-bottom:1px solid var(--line);display:flex;gap:10px}
+.after .ev:last-child{border-bottom:0}
+.after .ev .t{flex:none;width:54px;font-weight:700;font-size:15px}
+.after .ev .w{font-size:14px;color:var(--sub)}
+.after .ev.mine .t{color:var(--accent)}
+.after .ev .who{display:inline-block;font-size:14px;border-radius:6px;padding:0 6px;background:var(--off-bg);color:var(--sub);margin-right:4px}
+.after .ev.mine .who{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.muted{color:var(--sub);font-size:14px}
+details.more summary{min-height:44px;display:flex;align-items:center;cursor:pointer;color:var(--sub);font-size:15px}
+.weekview .d{background:var(--card);border-radius:16px;padding:10px 14px;margin-top:10px}
+.weekview .d h3{margin:0 0 6px;font-size:17px;display:flex;align-items:center;gap:8px}
+.weekview .d h3 .badge{font-size:14px;font-weight:normal;color:var(--warn)}
+.weekview .row{display:flex;gap:10px;padding:6px 0;border-top:1px solid var(--line);font-size:15px;align-items:baseline}
+.weekview .row .n{flex:none;width:22px;font-weight:700;color:var(--sub);text-align:center}
+.weekview .row .s{flex:1;min-width:0;font-weight:600;border-left:3px solid var(--c);padding-left:8px;overflow-wrap:anywhere}
+.weekview .row .r{flex:none;max-width:45%;text-align:right;color:var(--sub);font-size:14px}
+.weekview .row.cut .s{color:var(--off);text-decoration:line-through;border-left-color:var(--off)}
+.weekview .row.changed .s{border-left-color:var(--warn)}
+footer{margin-top:28px;font-size:14px;color:var(--sub)}
+footer p{margin:6px 0}
+/* 設定 */
+.sheet{position:fixed;inset:0;z-index:20;background:var(--bg);overflow-y:auto;display:none}
+.sheet.open{display:block}
+.sheet .wrap{padding-top:12px;padding-bottom:120px}
+.sheet h2{color:var(--ink);font-size:18px;margin:24px 0 6px}
+.sheet .lead{color:var(--sub);font-size:15px;margin:0 0 8px}
+.grade{margin:10px 0}
+.grade .gl{font-size:14px;color:var(--sub);margin-bottom:4px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{min-height:44px;min-width:56px;padding:0 14px;border-radius:12px;border:1px solid var(--line);background:var(--card);cursor:pointer;font-size:16px}
+.chip.sel{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+:root[data-theme="dark"] .chip.sel{color:#062a27}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .chip.sel{color:#062a27}}
+.q{background:var(--card);border-radius:16px;padding:12px 14px;margin-top:10px}
+.q .ql{font-weight:700;margin-bottom:2px}
+.q .qw{font-size:14px;color:var(--sub);margin-bottom:8px}
+.sheet .bottom{position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:12px 16px calc(12px + env(safe-area-inset-bottom))}
+.sheet .bottom .in{max-width:560px;margin:0 auto;display:flex;gap:8px}
+.sheet .bottom .btn{flex:1}
+.welcome{background:var(--card);border-radius:16px;padding:20px 16px;margin-top:16px;text-align:center}
+.welcome p{margin:6px 0 14px;color:var(--sub)}
+.nw{white-space:nowrap}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+
+<div class="sheet" id="sheet" role="dialog" aria-label="クラスと選択科目の設定">
+  <div class="wrap" id="sheetBody"></div>
+  <div class="bottom"><div class="in">
+    <button class="btn" id="cancelBtn">やめる</button>
+    <button class="btn primary" id="saveBtn">これで決定</button>
+  </div></div>
+</div>
+
+<script src="data.js"></script>
+<script>
+(() => {
+const D = window.DATA;
+const WD = ['日','月','火','水','木','金','土'];
+const KEY = 'jikanwari-navi.v1';
+const PIN = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></svg>';
+
+// ---------- 保存
+function load(){ try{ return JSON.parse(localStorage.getItem(KEY)) || null; }catch(e){ return null; } }
+function save(p){ try{ localStorage.setItem(KEY, JSON.stringify(p)); }catch(e){} }
+let prof = load();
+let view = 'day';
+let cur = startOfDay(new Date());
+
+// ---------- 日付
+function startOfDay(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+function iso(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function addDays(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
+function monday(d){ const w=d.getDay(); return addDays(d, w===0? 1 : (w===6? 2 : 1-w)); }
+function md(d){ return (d.getMonth()+1)+'月'+d.getDate()+'日'; }
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+// ---------- 色（教科）
+function color(s){
+  s = s || '';
+  if(/芸術|音楽|美術|書道/.test(s)) return 'var(--c-gei)';
+  if(/ＬＨＲ|LHR|総合|HR/.test(s)) return 'var(--c-hr)';
+  if(/体育|保健|スポーツ/.test(s)) return 'var(--c-tai)';
+  if(/英|論理表現/.test(s)) return 'var(--c-eigo)';
+  if(/数学|特講α|精選|ⅠＡ|ⅡＢＣ|ＢＣ/.test(s)) return 'var(--c-sugaku)';
+  if(/国語|現代|言語文化|古典|表現研究/.test(s)) return 'var(--c-koku)';
+  if(/物理|化学|生物|理科|科学と|地学/.test(s)) return 'var(--c-rika)';
+  if(/歴史|地理|公共|倫理|政治|政経|日本史|世界史|社会実践|公民/.test(s)) return 'var(--c-chireki)';
+  return 'var(--c-etc)';
+}
+
+// ---------- 予定のあて先
+function cls(){ return prof && D.classes[prof.cls]; }
+function targets(){
+  const c = cls(); if(!c) return [];
+  const code = prof.cls.slice(0,2);
+  const t = ['全員','全校', c.grade+'年', prof.cls, code];
+  if(c.course){ t.push('普通科', c.grade+'年普通科'); t.push(c.course.replace('2文','2年文系').replace('2理','2年理系').replace('3文','3年文系').replace('3理','3年理系')); }
+  else { t.push('専門学科', c.grade+'年専門学科'); }
+  return t;
+}
+function tokens(s){ return String(s||'全員').split(/[\s、,・]+/).filter(Boolean); }
+function forMe(ev){ const mine = targets(); return tokens(ev['対象']).some(x => mine.includes(x)); }
+function onDate(ev, ds){ const a = ev['日付'], b = ev['まで'] || a; return a <= ds && ds <= b; }
+function myTags(){ return (prof && prof.tags) || []; }
+function isGroupEvent(ev){ return tokens(ev['対象']).some(x => /委員会$|部$|会$|係$/.test(x) && !['全員','全校'].includes(x)); }
+function range(s){
+  const out = []; String(s||'').split(/[,、]/).forEach(p => {
+    const m = p.match(/(\d)\s*[-〜~]\s*(\d)/); if(m){ for(let i=+m[1]; i<=+m[2]; i++) out.push(i); }
+    else if(/\d/.test(p)) out.push(+p.match(/\d/)[0]);
+  }); return out;
+}
+
+// ---------- 1日分を組み立てる
+function dayPlan(d){
+  const ds = iso(d);
+  const evs = D.events.filter(e => onDate(e, ds));
+  const mine = evs.filter(e => forMe(e) && !isGroupEvent(e));
+  const plan = { date:d, ds, notes:[], off:null, periods:[], after:[], jitei:'通常' };
+  mine.filter(e => e['種類']==='行事' || e['種類']==='連絡').forEach(e => plan.notes.push(e));
+  const offEv = mine.find(e => e['種類']==='休み');
+  let wd = d.getDay();
+  const swap = mine.find(e => e['種類']==='曜日');
+  if(swap){ const k = WD.indexOf(String(swap['内容']).trim()[0]); if(k>0) wd = k; }
+  const jt = mine.find(e => e['種類']==='時程'); if(jt && D.jitei[jt['内容']]) plan.jitei = jt['内容'];
+  if(offEv) plan.off = offEv['内容'] || 'お休み';
+  else if((wd===0 || wd===6) && !swap) plan.off = WD[d.getDay()]+'曜日';
+  // 放課後・委員会（自分の委員会・部活は強調。それ以外も「ほかの予定」に出す）
+  evs.filter(e => ['放課後','委員会','部活'].includes(e['種類']) || isGroupEvent(e)).forEach(e => {
+    const tg = tokens(e['対象']);
+    const isMine = tg.some(x => myTags().includes(x)) || (!isGroupEvent(e) && forMe(e));
+    const relevant = isMine || isGroupEvent(e);
+    if(relevant) plan.after.push({ev:e, mine:isMine});
+  });
+  plan.after.sort((a,b) => (b.mine - a.mine) || String(a.ev['時刻']||'').localeCompare(String(b.ev['時刻']||'')));
+  if(plan.off) return plan;
+  const c = cls();
+  const times = D.jitei[plan.jitei] || D.jitei['通常'] || [];
+  for(let p=1; p<=7; p++){
+    const slot = c.slots[(wd-1)*7 + (p-1)];
+    const tm = times.find(t => String(t.p)===String(p));
+    const item = { p, time: tm ? tm.start+'〜'+tm.end : '', start: tm && tm.start, end: tm && tm.end };
+    Object.assign(item, resolve(slot));
+    const rep = mine.filter(e => e['種類']==='差し替え' && range(e['時限']).includes(p)).pop();
+    const cut = mine.filter(e => e['種類']==='カット' && (range(e['時限']).includes(p) || !e['時限'])).pop();
+    if(rep){ item.changed = true; item.orig = item.subj; item.subj = rep['内容']; item.room = rep['場所'] || ''; item.alts=''; item.tag=''; item.need=null;
+      item.why = item.orig && !/考査/.test(rep['内容']) ? 'ふだんは '+item.orig : ''; }
+    else if(cut){ item.cut = true; item.why = cut['内容'] || '授業なし'; }
+    plan.periods.push(item);
+  }
+  // 授業のない時限が最後に続くときは出さない（カットは出す）
+  while(plan.periods.length && !plan.periods.at(-1).subj && !plan.periods.at(-1).cut && !plan.periods.at(-1).changed) plan.periods.pop();
+  return plan;
+}
+
+function roomText(rooms, groupKey){
+  // rooms: [[班, 教室], ...]
+  if(!rooms || !rooms.length) return {room:'', alts:''};
+  if(rooms.length===1) return {room:rooms[0][1], alts:''};
+  const grouped = rooms.every(r => r[0]);
+  if(grouped){
+    const g = prof.groups && prof.groups[groupKey];
+    const hit = g && rooms.find(r => r[0]===g);
+    if(hit) return {room:hit[1], alts:'班 '+'①②③'[g-1], groupKey};
+    return {room: rooms.map(r => '①②③'[r[0]-1]+' '+r[1]).join(' ／ '), alts:'分かれて授業。自分の班を設定すると1つだけ出ます', needGroup:groupKey};
+  }
+  return {room: rooms.map(r => r[1]).join('・'), alts:''};
+}
+
+function resolve(slot){
+  if(!slot) return {subj:'', room:''};
+  if(slot.block){
+    const b = D.blocks[slot.block];
+    const pick = prof.choices && prof.choices[slot.block];
+    if(pick && slot.rooms[pick]){
+      const rt = roomText(slot.rooms[pick], pick);
+      return {subj:pick, tag:b.label, room:rt.room, alts:rt.alts, need: rt.needGroup ? 'group' : null};
+    }
+    return {subj:b.label, tag:'', room:'', alts: b.options.join(' / '), need:'block'};
+  }
+  const rt = roomText(slot.rooms, slot.s);
+  return {subj:slot.s, tag: slot.note || '', room:rt.room, alts:rt.alts, need: rt.needGroup ? 'group' : null};
+}
+
+// ---------- 画面
+function render(){
+  const app = document.getElementById('app');
+  if(!cls()){
+    app.innerHTML = `<header><div class="top"><h1>時間割ナビ <small>${esc(D.year)}</small></h1></div></header>
+      <div class="welcome"><div style="font-size:20px;font-weight:700">ようこそ</div>
+      <p>クラスと選択科目を選ぶと、<span class="nw">その日の時間割と教室が</span><span class="nw">すぐわかります。</span></p>
+      <button class="btn primary" style="width:100%" id="startBtn">クラスを選ぶ</button>
+      <p class="muted" style="margin-top:12px">選んだ内容はこのスマホの中だけに保存されます。</p></div>`;
+    document.getElementById('startBtn').onclick = openSheet;
+    return;
+  }
+  const c = cls();
+  const today = startOfDay(new Date());
+  const mon = monday(cur);
+  let wk = '';
+  for(let i=0;i<5;i++){
+    const d = addDays(mon,i), p = dayPlan(d);
+    wk += `<button data-d="${iso(d)}" class="${iso(d)===iso(cur)?'sel':''} ${iso(d)===iso(today)?'today':''} ${p.off?'holiday':''}">${WD[d.getDay()]}<small>${d.getMonth()+1}/${d.getDate()}</small></button>`;
+  }
+  const label = iso(cur)===iso(today) ? '今日' : (iso(cur)===iso(addDays(today,1)) ? '明日' : (iso(cur)===iso(addDays(today,-1)) ? '昨日' : ''));
+  let html = `<header>
+    <div class="top"><h1>${esc(c.label)}<small>${esc(D.year)}</small></h1>
+      <button class="btn" id="setBtn">設定</button></div>
+    <div class="datebar">
+      <button class="arrow" id="prev" aria-label="前の日">‹</button>
+      <div class="day">${md(cur)}（${WD[cur.getDay()]}）<small>${label || '&nbsp;'}</small></div>
+      <button class="arrow" id="next" aria-label="次の日">›</button>
+    </div>
+    <div class="week">${wk}</div>
+    <div class="tabs"><button data-v="day" class="${view==='day'?'sel':''}">1日</button><button data-v="week" class="${view==='week'?'sel':''}">1週間</button>${iso(cur)!==iso(today)?'<button data-v="today">今日へ</button>':''}</div>
+  </header>`;
+  html += view==='day' ? dayHTML(dayPlan(cur)) : weekHTML(mon);
+  html += `<footer>
+    <p>もとの資料：${esc(D.year)} 時間割（教室配当）・年間行事予定。行事や特別時間割は変わることがあります。<b>最後は担任・掲示の連絡を優先</b>してください。</p>
+    <p>データ更新：${esc(D.updated)}</p></footer>`;
+  app.innerHTML = html;
+  bind();
+}
+
+function dayHTML(p){
+  let h = '';
+  p.notes.forEach(e => h += `<div class="notice"><b>${esc(e['種類']==='連絡'?'連絡':'行事')}</b>　${esc(e['内容'])}${e['場所']?'（'+esc(e['場所'])+'）':''}</div>`);
+  if(p.off){
+    h += `<div class="off"><div class="big">授業はありません</div>${esc(p.off)}
+      ${nextSchoolDay(p.date) ? `<div style="margin-top:14px"><button class="btn primary" data-go="${iso(nextSchoolDay(p.date))}">次の授業日（${md(nextSchoolDay(p.date))}）を見る</button></div>` : ''}</div>`;
+    if(p.after.length) h += afterHTML(p);
+    return h;
+  }
+  const now = new Date(); const isToday = iso(now)===p.ds;
+  const hm = now.getHours()*60 + now.getMinutes();
+  const toMin = s => { const [a,b] = String(s||'').split(':').map(Number); return a*60+b; };
+  let nowP = null;
+  if(isToday){
+    const live = p.periods.filter(x => x.start && !x.cut);
+    nowP = live.find(x => hm >= toMin(x.start)-10 && hm <= toMin(x.end));
+  }
+  if(plMissing(p)) h += `<div class="notice info"><b>選択科目</b>　まだ選んでいない選択があります。<button class="set" data-open="1">設定する</button></div>`;
+  h += '<div class="list">';
+  const rows = [];
+  p.periods.forEach(x => { const last = rows.at(-1);
+    if(x.cut && last && last.cut && last.why===x.why){ last.pTo = x.p; last.end = x.end; last.subj = ''; } else rows.push({...x}); });
+  rows.forEach((x,i) => {
+    if(x.p===5 && i>0) h += `<div class="break">昼休み</div>`;
+    const cl = ['period'];
+    if(x.cut) cl.push('cut'); if(x.cut && !x.subj) cl.push('merged'); if(x.changed) cl.push('changed'); if(!x.subj && !x.cut) cl.push('empty');
+    if(nowP && nowP.p===x.p) cl.push('now');
+    h += `<div class="${cl.join(' ')}" style="--c:${color(x.subj)}">
+      <div class="no"><b>${x.p}${x.pTo?'<span style="font-size:15px">〜'+x.pTo+'</span>':''}</b><small>${esc(x.start||'')}</small><small>${x.end?'〜'+esc(x.end):''}</small></div>
+      <div class="body">
+        <div class="subj">${x.subj ? esc(x.subj) : '授業なし'}${x.tag?`<span class="tag">${esc(x.tag)}</span>`:''}</div>
+        ${x.cut ? `<div class="why">${esc(x.why)}</div>` : ''}
+        ${x.changed && x.why ? `<div class="why">${esc(x.why)}</div>` : ''}
+        ${!x.cut && x.room ? `<div class="room">${PIN}<b>${esc(x.room)}</b></div>` : ''}
+        ${!x.cut && x.alts ? `<div class="alts">${esc(x.alts)}</div>` : ''}
+        ${!x.cut && x.need ? `<button class="set" data-open="1">${x.need==='block'?'自分の科目を選ぶ':'自分の班を選ぶ'}</button>` : ''}
+      </div></div>`;
+  });
+  h += '</div>';
+  h += afterHTML(p);
+  return h;
+}
+function nextSchoolDay(d){ for(let i=1;i<=40;i++){ const x = addDays(d,i); if(!dayPlan(x).off) return x; } return null; }
+function plMissing(p){ return p.periods.some(x => x.need==='block' && !x.cut && !x.changed); }
+
+function afterHTML(p){
+  const mine = p.after.filter(a => a.mine), other = p.after.filter(a => !a.mine);
+  const row = a => `<div class="ev ${a.mine?'mine':''}"><div class="t">${esc(a.ev['時刻']||'放課後')}</div><div>
+      <div>${tokens(a.ev['対象']).filter(t=>!['全員','全校'].includes(t)).map(t=>`<span class="who">${esc(t)}</span>`).join('')}${esc(a.ev['内容'])}</div>
+      ${a.ev['場所']?`<div class="w">${esc(a.ev['場所'])}</div>`:''}</div></div>`;
+  let h = `<h2>放課後・委員会</h2>`;
+  if(!p.after.length) return h + `<p class="muted">この日の予定は入っていません。</p>`;
+  if(mine.length) h += `<div class="after">${mine.map(row).join('')}</div>`;
+  else h += `<p class="muted">自分あての予定はありません。</p>`;
+  if(other.length) h += `<details class="more"><summary>ほかの委員会・部活の予定（${other.length}件）</summary><div class="after">${other.map(row).join('')}</div></details>`;
+  return h;
+}
+
+function weekHTML(mon){
+  let h = '<div class="weekview">';
+  for(let i=0;i<5;i++){
+    const p = dayPlan(addDays(mon,i));
+    h += `<div class="d"><h3>${md(p.date)}（${WD[p.date.getDay()]}）${p.notes.length?`<span class="badge">行事あり</span>`:''}</h3>`;
+    if(p.off){ h += `<div class="muted">授業なし：${esc(p.off)}</div></div>`; continue; }
+    p.notes.forEach(e => h += `<div class="muted">● ${esc(e['内容'])}</div>`);
+    p.periods.forEach(x => {
+      h += `<div class="row ${x.cut?'cut':''} ${x.changed?'changed':''}" style="--c:${color(x.subj)}"><span class="n">${x.p}</span><span class="s">${x.subj?esc(x.subj):'―'}</span><span class="r">${x.cut?'なし':esc(x.room||'')}</span></div>`;
+    });
+    const mine = p.after.filter(a => a.mine);
+    mine.forEach(a => h += `<div class="row"><span class="n">後</span><span class="s" style="--c:var(--accent)">${esc(a.ev['内容'])}</span><span class="r">${esc(a.ev['時刻']||'')}</span></div>`);
+    h += '</div>';
+  }
+  return h + '</div>';
+}
+
+function bind(){
+  const $ = id => document.getElementById(id);
+  $('setBtn').onclick = openSheet;
+  $('prev').onclick = () => { cur = addDays(cur,-1); render(); };
+  $('next').onclick = () => { cur = addDays(cur,1); render(); };
+  document.querySelectorAll('.week button').forEach(b => b.onclick = () => { const [y,m,d] = b.dataset.d.split('-').map(Number); cur = new Date(y,m-1,d); render(); });
+  document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
+    if(b.dataset.v==='today'){ cur = startOfDay(new Date()); } else view = b.dataset.v; render(); });
+  document.querySelectorAll('[data-open]').forEach(b => b.onclick = openSheet);
+  document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { const [y,m,d] = b.dataset.go.split('-').map(Number); cur = new Date(y,m-1,d); render(); window.scrollTo(0,0); });
+}
+
+// ---------- 設定
+let draft = null;
+function openSheet(){
+  draft = JSON.parse(JSON.stringify(prof || {cls:'', choices:{}, groups:{}, tags:[]}));
+  draft.choices ||= {}; draft.groups ||= {}; draft.tags ||= [];
+  drawSheet();
+  document.getElementById('sheet').classList.add('open');
+  document.getElementById('sheet').scrollTop = 0;
+  document.body.style.overflow = 'hidden';
+}
+function closeSheet(){ document.getElementById('sheet').classList.remove('open'); document.body.style.overflow = ''; }
+
+function classNeeds(cid){
+  const c = D.classes[cid]; const blocks = [], groups = {};
+  c.slots.forEach(s => {
+    if(!s) return;
+    if(s.block){ if(!blocks.includes(s.block)) blocks.push(s.block);
+      const pick = draft.choices[s.block];
+      if(pick && s.rooms[pick] && s.rooms[pick].length>1 && s.rooms[pick].every(r=>r[0])) groups[pick] = Math.max(groups[pick]||0, s.rooms[pick].length);
+    } else if(s.rooms.length>1 && s.rooms.every(r=>r[0])) groups[s.s] = Math.max(groups[s.s]||0, s.rooms.length);
+  });
+  const order = Object.keys(D.blocks);
+  blocks.sort((x,y) => order.indexOf(x) - order.indexOf(y));
+  return {blocks, groups};
+}
+function allTags(){
+  const set = new Set();
+  D.events.forEach(e => tokens(e['対象']).forEach(t => { if(/委員会$|部$|係$/.test(t)) set.add(t); }));
+  return [...set].sort((a,b)=>a.localeCompare(b,'ja'));
+}
+
+function drawSheet(){
+  const body = document.getElementById('sheetBody');
+  let h = `<div class="top"><h1>クラスと選択科目</h1></div>
+    <p class="lead">選んだ内容はこのスマホ（ブラウザ）の中だけに保存されます。</p>
+    <h2>1. クラス</h2>`;
+  [1,2,3].forEach(g => {
+    h += `<div class="grade"><div class="gl">${g}年</div><div class="chips">`;
+    Object.entries(D.classes).filter(([,c]) => c.grade===g).forEach(([id,c]) => {
+      const short = id.replace(/^\d/, '').replace('服飾','（服飾）').replace('食物','（食物）');
+      h += `<button class="chip ${draft.cls===id?'sel':''}" data-cls="${id}">${esc(short)}</button>`;
+    });
+    h += `</div></div>`;
+  });
+  if(draft.cls){
+    const need = classNeeds(draft.cls);
+    if(need.blocks.length){
+      h += `<h2>2. 選択科目</h2><p class="lead">時間割で「〇選択」になっているところに、自分がとっている科目を選んでください。</p>`;
+      need.blocks.forEach(k => {
+        const b = D.blocks[k];
+        const when = whenOf(draft.cls, x => x && x.block===k);
+        h += `<div class="q"><div class="ql">${esc(b.label)}</div><div class="qw">${esc(when)}</div><div class="chips">`;
+        b.options.forEach(o => h += `<button class="chip ${draft.choices[k]===o?'sel':''}" data-blk="${esc(k)}" data-opt="${esc(o)}">${esc(o)}</button>`);
+        h += `</div></div>`;
+      });
+    }
+    const gk = Object.keys(need.groups);
+    if(gk.length){
+      h += `<h2>${need.blocks.length?3:2}. 分かれて受ける授業の班</h2><p class="lead">2〜3教室に分かれる授業です。わからなければ空けたままで大丈夫（教室が全部表示されます）。</p>`;
+      gk.forEach(s => {
+        h += `<div class="q"><div class="ql">${esc(s)}</div><div class="qw">${esc(groupRooms(draft.cls, s))}</div><div class="chips">`;
+        for(let i=1;i<=need.groups[s];i++) h += `<button class="chip ${draft.groups[s]===i?'sel':''}" data-grp="${esc(s)}" data-n="${i}">${'①②③'[i-1]}</button>`;
+        h += `<button class="chip ${!draft.groups[s]?'sel':''}" data-grp="${esc(s)}" data-n="0">わからない</button></div></div>`;
+      });
+    }
+    const tags = allTags();
+    h += `<h2>委員会・部活</h2>`;
+    if(tags.length){
+      h += `<p class="lead">選んだものは、放課後の予定でいちばん上に出ます（いくつでも）。</p><div class="chips">`;
+      tags.forEach(t => h += `<button class="chip ${draft.tags.includes(t)?'sel':''}" data-tag="${esc(t)}">${esc(t)}</button>`);
+      h += `</div>`;
+    } else h += `<p class="lead">委員会や部活の予定が入ると、ここで選べるようになります。</p>`;
+  }
+  body.innerHTML = h;
+  body.querySelectorAll('[data-cls]').forEach(b => b.onclick = () => { if(draft.cls!==b.dataset.cls){ draft.cls = b.dataset.cls; } drawSheet(); });
+  body.querySelectorAll('[data-blk]').forEach(b => b.onclick = () => { draft.choices[b.dataset.blk] = b.dataset.opt; drawSheet(); });
+  body.querySelectorAll('[data-grp]').forEach(b => b.onclick = () => { const n = +b.dataset.n; if(n) draft.groups[b.dataset.grp] = n; else delete draft.groups[b.dataset.grp]; drawSheet(); });
+  body.querySelectorAll('[data-tag]').forEach(b => b.onclick = () => { const t = b.dataset.tag; draft.tags = draft.tags.includes(t) ? draft.tags.filter(x=>x!==t) : [...draft.tags, t]; drawSheet(); });
+  document.getElementById('saveBtn').disabled = !draft.cls;
+}
+function whenOf(cid, test){
+  const c = D.classes[cid]; const out = [];
+  c.slots.forEach((s,i) => { if(test(s)){ const d = '月火水木金'[Math.floor(i/7)]; const last = out.at(-1); const p = i%7+1;
+    if(last && last.d===d && last.b===p-1){ last.b = p; } else out.push({d, a:p, b:p}); } });
+  return out.map(x => x.d + (x.a===x.b ? x.a : x.a+'・'+x.b)).join('　');
+}
+function groupRooms(cid, s){
+  const c = D.classes[cid]; const seen = new Map();
+  c.slots.forEach(x => {
+    let rooms = null;
+    if(x && !x.block && x.s===s) rooms = x.rooms;
+    if(x && x.block && x.rooms[s]) rooms = x.rooms[s];
+    (rooms||[]).forEach(r => { if(r[0]){ const k='①②③'[r[0]-1]; if(!seen.has(k)) seen.set(k, new Set()); seen.get(k).add(r[1]); } });
+  });
+  return [...seen.entries()].sort().map(([k,v]) => k+' '+[...v].join('・')).join('　');
+}
+
+document.getElementById('cancelBtn').onclick = () => { closeSheet(); };
+document.getElementById('saveBtn').onclick = () => { if(!draft.cls) return; prof = draft; save(prof); closeSheet(); render(); };
+
+function fromHash(){ const m = location.hash.match(/(\d{4})-(\d{2})-(\d{2})/); if(m) cur = new Date(+m[1], +m[2]-1, +m[3]); }
+fromHash();
+window.addEventListener('hashchange', () => { fromHash(); render(); });
+render();
+// 日付が変わったら今日に合わせる
+document.addEventListener('visibilitychange', () => { if(!document.hidden) render(); });
+})();
+</script>
+</body>
+</html>
