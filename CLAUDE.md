@@ -50,3 +50,10 @@
 1. PDFを source/gyouji_MM.pdf に置き、生徒に関係する行事・時程（午前授業・〇限カット・考査）・略称（学・協など）を 予定.csv に入れる
 2. その月の特別時間割（教員版）があれば source/tokubetsu/ に置く
 3. 表示する月.txt に YYYY-MM を足す → build → push
+
+## 教員用（別サイト）
+- 公開先: https://upopotennis-gif.github.io/jikanwari-navi-staff/ （リポジトリ ~/jikanwari-navi-staff）
+- `build_staff.py` が 職員版配布用・教室配当・特別時間割（教員版）・月間行事予定PDF（source/gyouji_MM.pdf、全部の欄）・予定.csv から作り、**合言葉で暗号化**（PBKDF2 20万回＋AES-GCM）して ../jikanwari-navi-staff/data.enc.js に書く。先生の名前が入るので平文では公開しない
+- 合言葉は source/staff_password.txt（公開しない）。変えるときはこのファイルを書きかえて build_staff.py → push
+- 名前の読みかえ（職員版→特別時間割の表記）は source/staff_rename.json（公開しない）
+- 更新するときは必ず build.py → build_staff.py の順で両方動かし、両方の repo を push

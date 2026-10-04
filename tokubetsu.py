@@ -46,10 +46,20 @@ def parse_pdf(path, year=2026):
         if abs(r - cy) > gap * 0.6:
             continue
         cells.setdefault((r, col[1], col[2]), []).append(w)
-    out = {d['date']: {'note': d['note'], 'periods': max(p for _, p in d['cols']), 'labels': []} for d in days}
+    # 行ごとの先生の名前（氏名列）
+    names = {}
+    for w in words:
+        if w[1] > hy + 4 and w[0] > 85 and w[2] < name_right and not re.fullmatch(r'[0-9]', w[4]):
+            r = min(rows, key=lambda r: abs(r - (w[1] + w[3]) / 2))
+            names.setdefault(r, []).append(w)
+    names = {r: ''.join(x[4] for x in sorted(ws, key=lambda x: x[0])) for r, ws in names.items()}
+    out = {d['date']: {'note': d['note'], 'periods': max(p for _, p in d['cols']), 'labels': [], 'teachers': {}} for d in days}
     for (r, di, p), ws in cells.items():
         ws.sort(key=lambda w: (round(w[1]), w[0]))
-        out[days[di]['date']]['labels'].append((p, '\n'.join(w[4] for w in ws)))
+        lab = '\n'.join(w[4] for w in ws)
+        o = out[days[di]['date']]
+        o['labels'].append((p, lab))
+        o['teachers'].setdefault(names.get(r, '?'), {})[p] = lab
     return out, gap, len(rows)
 
 
