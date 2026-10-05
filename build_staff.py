@@ -138,7 +138,10 @@ def main():
                     continue
                 labs = [cells.get(p, '') for p in range(1, day['periods'] + 1)]
                 sc = student['special'].get(date, {}).get('classes', {})
-                rs = [room_of(l)[0] or from_class(l, lambda c, p=p: (sc.get(c) or [None] * 7)[p]) for p, l in enumerate(labs)]
+                wd = datetime.date.fromisoformat(date).weekday()
+                # 同じ曜日・時限のふだんの授業と同じ表記なら、その教室（確か）。ちがえばふだんの教室の目安
+                rs = [(room_of(l, wd * 7 + p)[0] if wd < 5 and norm(l) in by_slot.get(wd * 7 + p, {}) else [])
+                      or room_of(l)[0] or from_class(l, lambda c, p=p: (sc.get(c) or [None] * 7)[p]) for p, l in enumerate(labs)]
                 per[n] = {'l': labs, 'r': rs}
             special[date] = {'periods': day['periods'], 'note': day['note'], 'src': '修学旅行特別時間割 ' + pdf.stem + '（第1案）', 't': per}
 

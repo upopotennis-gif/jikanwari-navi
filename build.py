@@ -314,14 +314,23 @@ def build_special(classes, warn):
                     if ent[0] == 'block':
                         if ent[1] not in BLOCKS:
                             continue
-                        slots[p - 1] = {'block': ent[1], 'rooms': block_rooms(cid, ent[1])}
+                        wd = datetime.date.fromisoformat(date).weekday()
+                        same = classes[cid]['slots'][wd * 7 + p - 1] if wd < 5 else None
+                        rooms = same['rooms'] if same and same.get('block') == ent[1] else block_rooms(cid, ent[1])
+                        slots[p - 1] = {'block': ent[1], 'rooms': rooms}
                     else:
                         names = [x.split('|')[0] for x in ent[1]]
                         # 表記ゆれ（英コミュⅡ/Ⅲ など）はふだんの時間割の名前にそろえる
                         base_names = {e['s'] for e in classes[cid]['slots'] if e and 'block' not in e}
                         names = list(dict.fromkeys(next((b for b in base_names if bare(b) == bare(n)), n) if n not in base_names else n for n in names))
                         note = 'Ⅱ選択' if any('|Ⅱ選択' in x for x in ent[1]) else ''
-                        rooms, varies = room_for(cid, names[0])
+                        # 同じ曜日・時限のふだんの授業と同じなら、その教室（確か）
+                        wd = datetime.date.fromisoformat(date).weekday()
+                        same = classes[cid]['slots'][wd * 7 + p - 1] if wd < 5 else None
+                        if same and 'block' not in same and same['s'] == names[0]:
+                            rooms, varies = same['rooms'], False
+                        else:
+                            rooms, varies = room_for(cid, names[0])
                         e = {'s': ' / '.join(names), 'rooms': rooms}
                         if note:
                             e['note'] = note
