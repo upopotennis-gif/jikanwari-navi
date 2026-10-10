@@ -16,6 +16,7 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 
 from tokubetsu import parse_pdf
+from kakutei import parse_rooms
 from invert import parse_label
 from build import BLOCKS
 import gyouji_pdf
@@ -128,6 +129,13 @@ def main():
     # ---- 特別時間割（教員版）
     special = {}
     names = {t['name'] for t in teachers}
+    # 確定版の教室配当: {日付: {時限: {norm表記: [教室]}}}
+    fixed = {}
+    for f in sorted((ROOT / 'source' / 'kakutei').glob('*教室配当.pdf')):
+        for d, per in parse_rooms(f).items():
+            for p, lst in per.items():
+                for room, lab in lst:
+                    fixed.setdefault(d, {}).setdefault(p, {}).setdefault(norm(lab), []).append(room)
     for pdf in sorted((ROOT / 'source' / 'tokubetsu').glob('*.pdf')):
         for date, day in parse_pdf(pdf)[0].items():
             per = {}
@@ -140,10 +148,12 @@ def main():
                 sc = student['special'].get(date, {}).get('classes', {})
                 wd = datetime.date.fromisoformat(date).weekday()
                 # 同じ曜日・時限のふだんの授業と同じ表記なら、その教室（確か）。ちがえばふだんの教室の目安
-                rs = [(room_of(l, wd * 7 + p)[0] if wd < 5 and norm(l) in by_slot.get(wd * 7 + p, {}) else [])
+                fx = fixed.get(date, {})
+                rs = [sorted(set(fx.get(p + 1, {}).get(norm(l), []))) or (room_of(l, wd * 7 + p)[0] if wd < 5 and norm(l) in by_slot.get(wd * 7 + p, {}) else [])
                       or room_of(l)[0] or from_class(l, lambda c, p=p: (sc.get(c) or [None] * 7)[p]) for p, l in enumerate(labs)]
                 per[n] = {'l': labs, 'r': rs}
-            special[date] = {'periods': day['periods'], 'note': day['note'], 'src': '修学旅行特別時間割 ' + pdf.stem + '（第1案）', 't': per}
+            special[date] = {'periods': day['periods'], 'note': day['note'], 'fixed': date in fixed, 't': per,
+                             'src': '修学旅行特別時間割 ' + pdf.stem + ('（確定）' if date in fixed else '（第1案）')}
 
     # ---- 月間行事予定（全部の欄）
     staff_events = {}

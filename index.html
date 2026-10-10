@@ -148,7 +148,7 @@ footer p{margin:6px 0}
   </div></div>
 </div>
 
-<script src="data.js?v=d78f12bbda"></script>
+<script src="data.js?v=43725be7d4"></script>
 <script>
 (() => {
 const D = window.DATA;
@@ -354,7 +354,7 @@ function dayHTML(p){
     const live = p.periods.filter(x => x.start && !x.cut);
     nowP = live.find(x => hm >= toMin(x.start)-10 && hm <= toMin(x.end));
   }
-  if(p.special) h += `<div class="notice info"><b>特別時間割</b>　${esc(p.special.src)}より。<span class="nw">教室はふだんの割り当てから出した目安です。</span></div>`;
+  if(p.special) h += `<div class="notice info"><b>特別時間割</b>　${esc(p.special.src)}より。${p.special.fixed ? '' : '<span class="nw">教室はふだんの割り当てから出した目安です。</span>'}</div>`;
   if(plMissing(p)) h += `<div class="notice info"><b>選択科目</b>　まだ選んでいない選択があります。<button class="set" data-open="1">設定する</button></div>`;
   h += '<div class="list">';
   const rows = [];

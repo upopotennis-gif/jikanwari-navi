@@ -13,6 +13,7 @@ import openpyxl
 from collections import Counter
 from invert import invert, ALIAS
 from tokubetsu import parse_pdf
+from kakutei import parse_rooms
 
 ROOT = pathlib.Path(__file__).parent
 DAYS = '月火水木金'
@@ -301,6 +302,14 @@ def build_special(classes, warn):
         cnt = Counter(json.dumps(e['rooms'], ensure_ascii=False) for e in classes[cid]['slots'] if e and e.get('block') == blk)
         return json.loads(cnt.most_common(1)[0][0]) if cnt else {}
 
+    # 確定版の教室配当（source/kakutei/*_教室配当.pdf）があれば、その日はその教室を使う
+    fixed = {}
+    for f in sorted((ROOT / 'source' / 'kakutei').glob('*教室配当.pdf')):
+        fixed.update(parse_rooms(f))
+
+    def fixed_rooms(date, p, test):
+        return [list(h) for h in lookup_assigned({0: fixed[date].get(p, [])}, 0, test)]
+
     special = {}
     for pdf in sorted((ROOT / 'source' / 'tokubetsu').glob('*.pdf')):
         for date, day in parse_pdf(pdf)[0].items():
@@ -317,6 +326,14 @@ def build_special(classes, warn):
                         wd = datetime.date.fromisoformat(date).weekday()
                         same = classes[cid]['slots'][wd * 7 + p - 1] if wd < 5 else None
                         rooms = same['rooms'] if same and same.get('block') == ent[1] else block_rooms(cid, ent[1])
+                        if date in fixed:
+                            tag = norm(BLOCKS[ent[1]]['tag'])
+                            fr = {}
+                            for o in BLOCKS[ent[1]]['options']:
+                                key = norm(o['key'])
+                                h = fixed_rooms(date, p, lambda n: key in n and (tag in n or ent[1] == '芸術'))
+                                fr[o['name']] = h or rooms.get(o['name'], [[0, o['room']]])
+                            rooms = fr
                         slots[p - 1] = {'block': ent[1], 'rooms': rooms}
                     else:
                         names = [x.split('|')[0] for x in ent[1]]
@@ -327,7 +344,14 @@ def build_special(classes, warn):
                         # 同じ曜日・時限のふだんの授業と同じなら、その教室（確か）
                         wd = datetime.date.fromisoformat(date).weekday()
                         same = classes[cid]['slots'][wd * 7 + p - 1] if wd < 5 else None
-                        if same and 'block' not in same and same['s'] == names[0]:
+                        code = re.sub(r'[^0-9A-F]', '', cid.translate(FW))[:2]
+                        key = norm(names[0])[:2]
+                        hit = fixed_rooms(date, p, lambda n: code in n and '選択' not in n and n.startswith(key)) if date in fixed else []
+                        if not hit and date in fixed and names[0] in ('ＬＨＲ', 'LHR'):
+                            hit = fixed_rooms(date, p, lambda n: code in n and 'LHR' in n)
+                        if hit:
+                            rooms, varies = hit, False
+                        elif same and 'block' not in same and same['s'] == names[0]:
                             rooms, varies = same['rooms'], False
                         else:
                             rooms, varies = room_for(cid, names[0])
@@ -345,7 +369,8 @@ def build_special(classes, warn):
                     if gaps:
                         warn.append(f'特別 {date} {cid}: {gaps}限が空き')
                 per[cid] = slots
-            special[date] = {'periods': day['periods'], 'src': '修学旅行特別時間割 ' + pdf.stem + '（第1案）', 'classes': per}
+            special[date] = {'periods': day['periods'], 'classes': per, 'fixed': date in fixed,
+                             'src': '修学旅行特別時間割 ' + pdf.stem + ('（確定）' if date in fixed else '（第1案）')}
     return special
 
 
