@@ -384,11 +384,27 @@ def read_csv(name):
     return [{k.strip(): (v or '').strip() for k, v in r.items() if k} for r in rows if any((v or '').strip() for v in r.values())]
 
 
+# 資料どうしで食い違う教室を、本人に確かめた答えで直す（教室配当の LHR は 1C・1D が入れ違っている。本人確認 2026-10-10）
+LHR_ROOM = {'1C': '国語３', '1D': '多目的２'}
+
+
+def fix_lhr(slots, cid):
+    for e in slots:
+        if e and 'block' not in e and e['s'] in ('ＬＨＲ', 'LHR') and cid in LHR_ROOM:
+            e['rooms'] = [[0, LHR_ROOM[cid]]]
+
+
 def main():
     wb = openpyxl.load_workbook(ROOT / 'source' / 'jikanwari.xlsx', data_only=True)
     warn = []
     classes, blocks = build_timetable(wb, warn)
+    warn[:] = [w for w in warn if not any(w.startswith(f'{c} 金7 ＬＨＲ') for c in LHR_ROOM)]
     special = build_special(classes, warn)
+    for cid, c in classes.items():
+        fix_lhr(c['slots'], cid)
+    for day in special.values():
+        for cid, slots in day['classes'].items():
+            fix_lhr(slots, cid)
     jitei = {}
     for r in read_csv('時程.csv'):
         jitei.setdefault(r['時程名'], []).append({'p': r['時限'], 'start': r['開始'], 'end': r['終了']})

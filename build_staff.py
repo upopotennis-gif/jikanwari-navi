@@ -16,6 +16,7 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 
 from tokubetsu import parse_pdf
+from build import LHR_ROOM
 from kakutei import parse_rooms
 from invert import parse_label
 from build import BLOCKS
@@ -124,7 +125,11 @@ def main():
         r, _ = room_of(lab, i)
         return r or from_class(lab, lambda c: student['classes'][c]['slots'][i])
 
-    base_rooms = {n: [base_room(n, i) for i in range(35)] for n in base}
+    def lhr_fix(label, rooms):
+        m = re.fullmatch(r'LHR([123][A-F])', norm(label))
+        return [LHR_ROOM[m.group(1)]] if m and m.group(1) in LHR_ROOM else rooms
+
+    base_rooms = {n: [lhr_fix(base[n][i], base_room(n, i)) for i in range(35)] for n in base}
 
     # ---- 特別時間割（教員版）
     special = {}
@@ -151,6 +156,7 @@ def main():
                 fx = fixed.get(date, {})
                 rs = [sorted(set(fx.get(p + 1, {}).get(norm(l), []))) or (room_of(l, wd * 7 + p)[0] if wd < 5 and norm(l) in by_slot.get(wd * 7 + p, {}) else [])
                       or room_of(l)[0] or from_class(l, lambda c, p=p: (sc.get(c) or [None] * 7)[p]) for p, l in enumerate(labs)]
+                rs = [lhr_fix(l, r) for l, r in zip(labs, rs)]
                 per[n] = {'l': labs, 'r': rs}
             special[date] = {'periods': day['periods'], 'note': day['note'], 'fixed': date in fixed, 't': per,
                              'src': '修学旅行特別時間割 ' + pdf.stem + ('（確定）' if date in fixed else '（第1案）')}
