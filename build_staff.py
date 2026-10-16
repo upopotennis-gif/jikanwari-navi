@@ -20,8 +20,9 @@ from build import LHR_ROOM
 from kakutei import parse_rooms
 from invert import parse_label
 
-# 中学校の授業（表記「(中学）」）の教室。国語は曜日で決まる（本人 2026-10-16）。数学・英語は未確認なので空欄
-CHUGAKU_ROOM = {'国語': {0: '中学3-3', 1: '中学3-2', 4: '中学3-1'}}
+# 中学校の授業（表記「(中学）」）の教室は、教室配当表の「国語／３－３」のような欄から引く（教科＝先生の教科）。
+# 同じ時限に同じ教科の中学のクラスが2つあるときは、受け持ちのクラスで選ぶ。国語＝月3-3・火3-2・金3-1（本人 2026-10-16）
+CHUGAKU_CLASS = {'国語': {0: '3', 1: '2', 4: '1'}}
 from build import BLOCKS
 import gyouji_pdf
 
@@ -134,13 +135,18 @@ def main():
 
     kyoka_of = {t['name']: t['kyoka'] for t in teachers}
 
-    def chugaku_fix(name, label, wd, rooms):
-        if '中学' in (label or '') and not rooms:
-            r = CHUGAKU_ROOM.get(kyoka_of.get(name), {}).get(wd)
-            return [r] if r else rooms
-        return rooms
+    def chugaku_fix(name, label, wd, rooms, table):
+        """table: その時限の {norm表記: [教室]}"""
+        if '中学' not in (label or '') or rooms:
+            return rooms
+        k = kyoka_of.get(name, '')
+        hits = {m.group(1): v for lab, v in table.items() if (m := re.fullmatch(re.escape(k) + r'3[－-]([123])', lab))}
+        want = CHUGAKU_CLASS.get(k, {}).get(wd)
+        if len(hits) > 1 and want in hits:
+            hits = {want: hits[want]}
+        return sorted({r for v in hits.values() for r in v})
 
-    base_rooms = {n: [chugaku_fix(n, base[n][i], i // 7, lhr_fix(base[n][i], base_room(n, i))) for i in range(35)] for n in base}
+    base_rooms = {n: [chugaku_fix(n, base[n][i], i // 7, lhr_fix(base[n][i], base_room(n, i)), by_slot.get(i, {})) for i in range(35)] for n in base}
 
     # ---- 特別時間割（教員版）
     special = {}
@@ -167,7 +173,7 @@ def main():
                 fx = fixed.get(date, {})
                 rs = [sorted(set(fx.get(p + 1, {}).get(norm(l), []))) or (room_of(l, wd * 7 + p)[0] if wd < 5 and norm(l) in by_slot.get(wd * 7 + p, {}) else [])
                       or room_of(l)[0] or from_class(l, lambda c, p=p: (sc.get(c) or [None] * 7)[p]) for p, l in enumerate(labs)]
-                rs = [chugaku_fix(n, l, wd, lhr_fix(l, r)) for l, r in zip(labs, rs)]
+                rs = [chugaku_fix(n, l, wd, lhr_fix(l, r), fx.get(p + 1, {}) if fx else by_slot.get(wd * 7 + p, {})) for p, (l, r) in enumerate(zip(labs, rs))]
                 per[n] = {'l': labs, 'r': rs}
             special[date] = {'periods': day['periods'], 'note': day['note'], 'fixed': date in fixed, 't': per,
                              'src': '修学旅行特別時間割 ' + pdf.stem + ('（確定）' if date in fixed else '（第1案）')}
