@@ -138,7 +138,7 @@ def main():
     kyoka_of = {t['name']: t['kyoka'] for t in teachers}
 
     # ---- 中学校の授業（source/chugaku.csv）
-    ch_week, ch_date = {}, {}
+    ch_week, ch_date, ch_week_room = {}, {}, {}
     _cf = ROOT / 'source' / 'chugaku.csv'
     if _cf.exists():
         with open(_cf, encoding='utf-8') as f:
@@ -146,6 +146,8 @@ def main():
                 d, n, p, c = row['日付'].strip(), row['先生'].strip(), int(row['時限']), row['クラス'].strip()
                 if d in '月火水木金':
                     ch_week[(n, '月火水木金'.index(d), p)] = c.split('-')[-1]
+                    if row.get('教室', '').strip():
+                        ch_week_room[(n, '月火水木金'.index(d), p)] = row['教室'].strip()
                 else:
                     ch_date[(d, n, p)] = (c, row.get('教室', '').strip())
 
@@ -162,7 +164,21 @@ def main():
         want = ch_week.get((name, wd, p))
         if len(hits) > 1 and want in hits:
             hits = {want: hits[want]}
-        return sorted({r for v in hits.values() for r in v})
+        out = sorted({r for v in hits.values() for r in v})
+        return out or ([ch_week_room[(name, wd, p)]] if (name, wd, p) in ch_week_room else [])
+
+    # ふだんの時間割の中学のコマは中学校の時間割（chugaku.csv の曜日の行）に合わせる（本人 2026-10-19）
+    for n in {k[0] for k in ch_week}:
+        if n not in base:
+            continue
+        for i in range(35):
+            mine = (n, i // 7, i % 7 + 1) in ch_week
+            if mine and not base[n][i]:
+                base[n][i] = '(中学）'
+            elif mine and '中学' not in base[n][i]:
+                print('  要確認: ふだんの時間割で中学のコマが高校の授業と重なる', n, '月火水木金'[i // 7], i % 7 + 1, base[n][i].replace('\n', ' '))
+            elif not mine and '中学' in base[n][i]:
+                base[n][i] = ''
 
     base_rooms = {n: [chugaku_fix(n, base[n][i], i // 7, i % 7 + 1, lhr_fix(base[n][i], base_room(n, i)), by_slot.get(i, {})) for i in range(35)] for n in base}
     base = {n: [chugaku_label(n, l, i // 7, i % 7 + 1) for i, l in enumerate(labs)] for n, labs in base.items()}
@@ -210,7 +226,11 @@ def main():
                 v['l'][p - 1], v['r'][p - 1] = '', []
             continue
         if v['l'][p - 1] and '中学' not in v['l'][p - 1]:
-            print('  要確認: 中学の授業が高校の予定と重なる', d, n, f'{p}限', '中' + c, '／', v['l'][p - 1].replace('\n', ' '))
+            # 高校の予定と重なるときは両方を並べて出す（本人 2026-10-19）
+            print('  要確認: 中学の授業が高校の予定と重なる（併記）', d, n, f'{p}限', '中' + c, '／', v['l'][p - 1].replace('\n', ' '))
+            v['l'][p - 1] = v['l'][p - 1].replace('\n', ' ') + '／(中学）\n中' + c + '（重なり）'
+            if room:
+                v['r'][p - 1] = sorted(set(v['r'][p - 1]) | {room})
             continue
         v['l'][p - 1] = '(中学）\n中' + c
         if room:
