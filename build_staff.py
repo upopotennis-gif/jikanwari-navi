@@ -21,8 +21,10 @@ from kakutei import parse_rooms
 from invert import parse_label
 
 # 中学校の授業（表記「(中学）」）の教室は、教室配当表の「国語／３－３」のような欄から引く（教科＝先生の教科）。
-# 同じ時限に同じ教科の中学のクラスが2つあるときは、受け持ちのクラスで選ぶ。国語＝月3-3・火3-2・金3-1（本人 2026-10-16）
-CHUGAKU_CLASS = {'国語': {0: '3', 1: '2', 4: '1'}}
+# 受け持ちのクラスと日ごとの変更は source/chugaku.csv（中学校の時間割から。先生の名前が入るので公開しない）
+#   日付＝曜日（月〜金）… ふだんの受け持ち。表記に「中3-3」を足し、教室配当表で同じ教科が2クラスあるときの選び分けにも使う
+#   日付＝YYYY-MM-DD … その日だけ。クラス＝なし で中学の授業を消す。教室を書けばその教室
+#   高校の別の予定が入っているコマには足さず「要確認」と出す
 from build import BLOCKS
 import gyouji_pdf
 
@@ -135,18 +137,35 @@ def main():
 
     kyoka_of = {t['name']: t['kyoka'] for t in teachers}
 
-    def chugaku_fix(name, label, wd, rooms, table):
+    # ---- 中学校の授業（source/chugaku.csv）
+    ch_week, ch_date = {}, {}
+    _cf = ROOT / 'source' / 'chugaku.csv'
+    if _cf.exists():
+        with open(_cf, encoding='utf-8') as f:
+            for row in csv.DictReader(f):
+                d, n, p, c = row['日付'].strip(), row['先生'].strip(), int(row['時限']), row['クラス'].strip()
+                if d in '月火水木金':
+                    ch_week[(n, '月火水木金'.index(d), p)] = c.split('-')[-1]
+                else:
+                    ch_date[(d, n, p)] = (c, row.get('教室', '').strip())
+
+    def chugaku_label(name, label, wd, p):
+        c = ch_week.get((name, wd, p))
+        return f'(中学）\n中3-{c}' if c and '中学' in (label or '') and '\n' not in label else label
+
+    def chugaku_fix(name, label, wd, p, rooms, table):
         """table: その時限の {norm表記: [教室]}"""
         if '中学' not in (label or '') or rooms:
             return rooms
         k = kyoka_of.get(name, '')
         hits = {m.group(1): v for lab, v in table.items() if (m := re.fullmatch(re.escape(k) + r'3[－-]([123])', lab))}
-        want = CHUGAKU_CLASS.get(k, {}).get(wd)
+        want = ch_week.get((name, wd, p))
         if len(hits) > 1 and want in hits:
             hits = {want: hits[want]}
         return sorted({r for v in hits.values() for r in v})
 
-    base_rooms = {n: [chugaku_fix(n, base[n][i], i // 7, lhr_fix(base[n][i], base_room(n, i)), by_slot.get(i, {})) for i in range(35)] for n in base}
+    base_rooms = {n: [chugaku_fix(n, base[n][i], i // 7, i % 7 + 1, lhr_fix(base[n][i], base_room(n, i)), by_slot.get(i, {})) for i in range(35)] for n in base}
+    base = {n: [chugaku_label(n, l, i // 7, i % 7 + 1) for i, l in enumerate(labs)] for n, labs in base.items()}
 
     # ---- 特別時間割（教員版）
     special = {}
@@ -173,10 +192,29 @@ def main():
                 fx = fixed.get(date, {})
                 rs = [sorted(set(fx.get(p + 1, {}).get(norm(l), []))) or (room_of(l, wd * 7 + p)[0] if wd < 5 and norm(l) in by_slot.get(wd * 7 + p, {}) else [])
                       or room_of(l)[0] or from_class(l, lambda c, p=p: (sc.get(c) or [None] * 7)[p]) for p, l in enumerate(labs)]
-                rs = [chugaku_fix(n, l, wd, lhr_fix(l, r), fx.get(p + 1, {}) if fx else by_slot.get(wd * 7 + p, {})) for p, (l, r) in enumerate(zip(labs, rs))]
+                rs = [chugaku_fix(n, l, wd, p + 1, lhr_fix(l, r), fx.get(p + 1, {}) if fx else by_slot.get(wd * 7 + p, {})) for p, (l, r) in enumerate(zip(labs, rs))]
+                labs = [chugaku_label(n, l, wd, p + 1) for p, l in enumerate(labs)]
                 per[n] = {'l': labs, 'r': rs}
             special[date] = {'periods': day['periods'], 'note': day['note'], 'fixed': date in fixed, 't': per,
                              'src': '修学旅行特別時間割 ' + pdf.stem + ('（確定）' if date in fixed else '（第1案）')}
+
+    # 中学校の時間割で日ごとに変わったコマ
+    for (d, n, p), (c, room) in sorted(ch_date.items()):
+        day = special.get(d)
+        if not day or n not in day['t'] or p > day['periods']:
+            print('  要確認: chugaku.csv の行が特別時間割にない', d, n, p)
+            continue
+        v = day['t'][n]
+        if c == 'なし':
+            if '中学' in v['l'][p - 1]:
+                v['l'][p - 1], v['r'][p - 1] = '', []
+            continue
+        if v['l'][p - 1] and '中学' not in v['l'][p - 1]:
+            print('  要確認: 中学の授業が高校の予定と重なる', d, n, f'{p}限', '中' + c, '／', v['l'][p - 1].replace('\n', ' '))
+            continue
+        v['l'][p - 1] = '(中学）\n中' + c
+        if room:
+            v['r'][p - 1] = [room]
 
     # ---- 月間行事予定（全部の欄）
     staff_events = {}
