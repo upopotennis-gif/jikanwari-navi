@@ -113,6 +113,40 @@ details.more summary{min-height:44px;display:flex;align-items:center;cursor:poin
 .weekview .row.changed .s{border-left-color:var(--warn)}
 footer{margin-top:28px;font-size:14px;color:var(--sub)}
 footer p{margin:6px 0}
+/* A4よこ1枚の印刷用（1週間の表示で「A4で印刷」） */
+#print{display:none}
+@page{size:A4 landscape;margin:9mm}
+@media print{
+  :root{color-scheme:light}
+  body{background:#fff;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  #app{max-width:none;padding:0}
+  #app:has(#print)>:not(#print){display:none}
+  #print{display:block;font:11pt/1.35 "Hiragino Sans","Noto Sans JP",sans-serif;color:#000}
+}
+#print .hd{display:flex;align-items:baseline;gap:14px;border-bottom:2.5px solid #000;padding-bottom:4px;margin-bottom:6px}
+#print .hd .nm{font-size:20pt;font-weight:700}
+#print .hd .wk{font-size:13pt;font-weight:700}
+#print .hd .tt{margin-left:auto;font-size:10pt;color:#444}
+#print table{width:100%;border-collapse:collapse;table-layout:fixed}
+#print th,#print td{border:1px solid #555;padding:3px 5px;vertical-align:top}
+#print thead th{background:#e9e9ef;font-size:12.5pt;text-align:center;padding:4px}
+#print thead th small{display:block;font-size:9pt;font-weight:normal}
+#print th.p{width:15mm;background:#f2f2f6;text-align:center;vertical-align:middle;font-size:15pt}
+#print th.p small{display:block;font-size:8pt;font-weight:normal;line-height:1.2}
+#print th.lab{background:#f2f2f6;font-size:9.5pt;vertical-align:middle;text-align:center}
+#print td.c{height:15mm}
+#print td.ev{font-size:8.5pt;line-height:1.3;height:11mm}
+#print td.ev div{margin-bottom:1px}
+#print .sj{font-size:11.5pt;font-weight:700;line-height:1.25}
+#print .tg{font-size:8.5pt;font-weight:normal;color:#444}
+#print .rm{font-size:10pt;margin-top:1px;line-height:1.3}
+#print .rm b{border:1.5px solid #000;border-radius:3px;padding:0 3px}
+#print .es{font-size:8pt;color:#555}
+#print .cut{color:#777;text-decoration:line-through}
+#print td.free{background:#fafafa}
+#print td.cutc{background:#f0f0f0}
+#print td.off{background:#eee;text-align:center;vertical-align:middle;font-size:13pt;font-weight:700;color:#444}
+#print .ft{margin-top:5px;font-size:8.5pt;color:#444}
 /* 設定 */
 .sheet{position:fixed;inset:0;z-index:20;background:var(--bg);overflow-y:auto;display:none}
 .sheet.open{display:block}
@@ -328,6 +362,7 @@ function render(){
   html += `<footer>
     <p>もとの資料：${esc(D.year)} 時間割（教室配当）・年間行事予定。行事や特別時間割は変わることがあります。<b>最後は担任・掲示の連絡を優先</b>してください。</p>
     <p>データ更新：${esc(D.updated)}</p></footer>`;
+  if(view==='week') html += printHTML(mon);
   app.innerHTML = html;
   bind();
 }
@@ -394,7 +429,9 @@ function afterHTML(p){
 }
 
 function weekHTML(mon){
-  let h = '<div class="weekview">';
+  const fri = addDays(mon,4);
+  let h = `<button class="btn primary" id="printBtn" style="width:100%;margin-top:10px">${mon.getMonth()+1}/${mon.getDate()}〜${fri.getMonth()+1}/${fri.getDate()} の週をA4で印刷</button>`;
+  h += '<div class="weekview">';
   for(let i=0;i<5;i++){
     const p = dayPlan(addDays(mon,i));
     h += `<div class="d"><h3>${md(p.date)}（${WD[p.date.getDay()]}）${p.special?`<span class="badge">特別時間割</span>`:''}${p.notes.length?`<span class="badge">行事あり</span>`:''}</h3>`;
@@ -410,9 +447,42 @@ function weekHTML(mon){
   return h + '</div>';
 }
 
+// A4よこ1枚: 曜日×時限の表＋行事・放課後の行
+function printHTML(mon){
+  const days = [0,1,2,3,4].map(i => dayPlan(addDays(mon,i)));
+  const fri = addDays(mon,4), base = D.jitei['通常'] || [];
+  let est = false, need = false;
+  let h = `<div id="print"><div class="hd"><span class="nm">${esc(cls().label)}</span><span class="wk">${md(mon)}（月）〜 ${md(fri)}（金）の時間割</span><span class="tt">${esc(D.year)}　印刷 ${md(new Date())}</span></div><table><thead><tr><th class="p" style="font-size:10pt">時限</th>`;
+  days.forEach(p => h += `<th>${md(p.date)}（${WD[p.date.getDay()]}）<small>${p.pending?'準備中':p.special?'特別時間割':p.off?'休み':p.jitei!=='通常'?esc(p.jitei):'&nbsp;'}</small></th>`);
+  h += `</tr></thead><tbody><tr><th class="lab">行事<br>連絡</th>`;
+  days.forEach(p => h += `<td class="ev">${p.notes.slice(0,4).map(e => `<div>・${esc(e['内容'])}${e['場所']?'（'+esc(e['場所'])+'）':''}</div>`).join('')}</td>`);
+  h += `</tr>`;
+  for(let n=1; n<=7; n++){
+    const tt = base.find(t => String(t.p)===String(n));
+    h += `<tr><th class="p">${n}<small>${tt?esc(tt.start)+'<br>〜'+esc(tt.end):''}</small></th>`;
+    days.forEach(p => {
+      if(p.off){ if(n===1) h += `<td class="off" rowspan="7">${p.pending?'準備中':'授業なし<br><span style="font-size:10pt;font-weight:normal">'+esc(p.off)+'</span>'}</td>`; return; }
+      const x = p.periods.find(y => y.p===n);
+      if(!x || (!x.subj && !x.cut)){ h += `<td class="free"></td>`; return; }
+      const guess = p.special && !p.special.fixed && x.room && !x.changed && !/いつもの教室|指示/.test(x.room);
+      if(guess) est = true;
+      if(x.need==='block' && !x.cut && !x.changed) need = true;
+      const tm = p.jitei!=='通常' && x.time ? `<div class="es">${esc(x.time)}</div>` : '';
+      if(x.cut){ h += `<td class="c cutc">${x.subj?`<div class="sj cut">${esc(x.subj)}</div>`:''}<div class="es">${esc(x.why)}</div></td>`; return; }
+      h += `<td class="c">${tm}<div class="sj">${esc(x.subj)}${x.tag?` <span class="tg">${esc(x.tag)}</span>`:''}</div>${x.room?`<div class="rm">📍<b>${esc(x.room)}</b>${guess?'<span class="es" style="white-space:nowrap"> 目安</span>':''}</div>`:''}${x.alts?`<div class="es">${esc(x.alts)}</div>`:''}${x.changed&&x.why?`<div class="es">${esc(x.why)}</div>`:''}</td>`;
+    });
+    h += `</tr>`;
+  }
+  h += `<tr><th class="lab">放課後<br>委員会</th>`;
+  days.forEach(p => h += `<td class="ev">${p.after.slice(0,5).map(a => `<div>・${a.ev['時刻']&&a.ev['時刻']!=='放課後'?esc(a.ev['時刻'])+' ':''}${esc(a.ev['内容'])}</div>`).join('')}</td>`);
+  h += `</tr></tbody></table><div class="ft">空欄は授業なし。${need?'選択科目を設定すると、自分の科目と教室が入ります。':''}${est?'「目安」の教室はふだんの割り当てから出したものです。':''}行事や特別時間割は変わることがあります。最後は担任・掲示の連絡を優先してください。　時間割ナビより　データ更新 ${esc(D.updated)}</div></div>`;
+  return h;
+}
+
 function bind(){
   const $ = id => document.getElementById(id);
   $('setBtn').onclick = openSheet;
+  if($('printBtn')) $('printBtn').onclick = () => window.print();
   $('prev').onclick = () => { cur = addDays(cur,-1); render(); };
   $('next').onclick = () => { cur = addDays(cur,1); render(); };
   document.querySelectorAll('.week button').forEach(b => b.onclick = () => { const [y,m,d] = b.dataset.d.split('-').map(Number); cur = new Date(y,m-1,d); render(); });
