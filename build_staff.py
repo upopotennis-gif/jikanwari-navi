@@ -236,6 +236,40 @@ def main():
         if room:
             v['r'][p - 1] = [room]
 
+    # ---- 先生ごとの予定（教科会など）: source/staff_yotei.csv（先生の名前が入るので公開しない。本人 2026-10-29）
+    #   列: 日付, 先生（空白区切りで複数）, 時限（2 や 5-7）, 内容, 場所
+    #   特別時間割のない日は、ふだんの時間割を写した日を作って置きかえる
+    _sf = ROOT / 'source' / 'staff_yotei.csv'
+    if _sf.exists():
+        with open(_sf, encoding='utf-8') as f:
+            for row in csv.DictReader(f):
+                d = row['日付'].strip()
+                wd = datetime.date.fromisoformat(d).weekday()
+                a, _, b = row['時限'].strip().partition('-')
+                ps = range(int(a), int(b or a) + 1)
+                if d not in special:
+                    if wd > 4:
+                        print('  要確認: staff_yotei.csv の日が土日', d)
+                        continue
+                    special[d] = {'periods': 7, 'note': '', 'fixed': True, 'src': 'ふだんの時間割',
+                                  't': {n: {'l': base[n][wd * 7:wd * 7 + 7], 'r': base_rooms[n][wd * 7:wd * 7 + 7]} for n in base}}
+                day = special[d]
+                for n in row['先生'].split():
+                    n = RENAME.get(n, n)
+                    if n not in day['t']:
+                        print('  要確認: staff_yotei.csv の先生が一覧にない', d, n)
+                        continue
+                    v = day['t'][n]
+                    for p in ps:
+                        if p > day['periods']:
+                            continue
+                        if v['l'][p - 1]:
+                            print('  要確認: 先生ごとの予定が授業と重なる（併記）', d, n, f'{p}限', v['l'][p - 1].replace('\n', ' '))
+                            v['l'][p - 1] = v['l'][p - 1].replace('\n', ' ') + '／' + row['内容'].strip() + '（重なり）'
+                        else:
+                            v['l'][p - 1] = row['内容'].strip()
+                        v['r'][p - 1] = sorted(set(v['r'][p - 1]) | ({row['場所'].strip()} if row.get('場所', '').strip() else set()))
+
     # ---- 月間行事予定（全部の欄）
     staff_events = {}
     for pdf in sorted((ROOT / 'source').glob('gyouji_*.pdf')):
