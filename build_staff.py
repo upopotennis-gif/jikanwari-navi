@@ -214,6 +214,38 @@ def main():
             special[date] = {'periods': day['periods'], 'note': day['note'], 'fixed': date in fixed, 't': per,
                              'src': '修学旅行特別時間割 ' + pdf.stem + ('（確定）' if date in fixed else '（第1案）')}
 
+    # 特別時間割の日も、中学の授業は中学校の時間割（chugaku.csv の曜日の行）どおりに置く。
+    # 模試などの裏でも中学の授業はあるので、高校の教員版の「(中学）」の有無には頼らない（本人 2026-10-30）
+    ch_teachers = {k[0] for k in ch_week}
+    for d, day in special.items():
+        wd = datetime.date.fromisoformat(d).weekday()
+        if wd > 4:
+            continue
+        fx = fixed.get(d, {})
+        for n in ch_teachers:
+            if n not in day['t']:
+                if n not in names:
+                    continue
+                day['t'][n] = {'l': [''] * 7, 'r': [[] for _ in range(7)]}
+            v = day['t'][n]
+            for p in range(1, day['periods'] + 1):
+                if (d, n, p) in ch_date:   # 日付の行（その日の変更）は下で入れる
+                    continue
+                lab, c = v['l'][p - 1], ch_week.get((n, wd, p))
+                if not c:
+                    if '中学' in lab:
+                        v['l'][p - 1], v['r'][p - 1] = '', []
+                    continue
+                if '中学' in lab:
+                    continue
+                room = chugaku_fix(n, '(中学）', wd, p, [], fx.get(p, {}) if fx else by_slot.get(wd * 7 + p - 1, {}))
+                if lab and not re.fullmatch(r'\([１２３]年\)|[①-⑨]', lab):
+                    print('  要確認: 中学の授業が高校の予定と重なる（併記）', d, n, f'{p}限', '中3-' + c, '／', lab.replace('\n', ' '))
+                    v['l'][p - 1] = lab.replace('\n', ' ') + '／(中学）\n中3-' + c + '（重なり）'
+                    v['r'][p - 1] = sorted(set(v['r'][p - 1]) | set(room))
+                else:
+                    v['l'][p - 1], v['r'][p - 1] = '(中学）\n中3-' + c, room
+
     # 中学校の時間割で日ごとに変わったコマ
     for (d, n, p), (c, room) in sorted(ch_date.items()):
         day = special.get(d)
