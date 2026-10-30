@@ -245,8 +245,10 @@ def main():
             for row in csv.DictReader(f):
                 d = row['日付'].strip()
                 wd = datetime.date.fromisoformat(d).weekday()
+                # 時限は 2 や 5-7。「放課後」は7限のあとの欄に出す（模試の監督など。2026-10-30）
+                after = row['時限'].strip() == '放課後'
                 a, _, b = row['時限'].strip().partition('-')
-                ps = range(int(a), int(b or a) + 1)
+                ps = [] if after else range(int(a), int(b or a) + 1)
                 if d not in special:
                     if wd > 4:
                         print('  要確認: staff_yotei.csv の日が土日', d)
@@ -257,13 +259,18 @@ def main():
                 for n in row['先生'].split():
                     n = RENAME.get(n, n)
                     if n not in day['t']:
-                        print('  要確認: staff_yotei.csv の先生が一覧にない', d, n)
-                        continue
+                        if n not in names:
+                            print('  要確認: staff_yotei.csv の先生が一覧にない', d, n)
+                            continue
+                        # 特別時間割（教員版）に行のない先生は空の行を作る
+                        day['t'][n] = {'l': [''] * 7, 'r': [[] for _ in range(7)]}
                     v = day['t'][n]
+                    if after:
+                        v.setdefault('a', []).append(row['内容'].strip() + (f"（{row['場所'].strip()}）" if row.get('場所', '').strip() else ''))
                     for p in ps:
                         if p > day['periods']:
                             continue
-                        if v['l'][p - 1]:
+                        if v['l'][p - 1] and not re.fullmatch(r'\([１２３]年\)|[①-⑨]', v['l'][p - 1]):  # 学年の印（(３年)・① など）は置きかえる
                             print('  要確認: 先生ごとの予定が授業と重なる（併記）', d, n, f'{p}限', v['l'][p - 1].replace('\n', ' '))
                             v['l'][p - 1] = v['l'][p - 1].replace('\n', ' ') + '／' + row['内容'].strip() + '（重なり）'
                         else:
