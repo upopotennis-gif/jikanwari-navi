@@ -325,6 +325,12 @@ def main():
         'events': student['events'], 'jitei': student['jitei'], 'ready': student.get('ready', []),
     }
 
+    # 共テプレの「監督・空き一覧」（~/kyotepure-jikanwari/aki.py）用に、暗号化せずに書き出すだけ（公開しない場所へ）
+    if os.environ.get('STAFF_DUMP'):
+        pathlib.Path(os.environ['STAFF_DUMP']).write_text(json.dumps(payload, ensure_ascii=False), encoding='utf-8')
+        print('書き出し:', os.environ['STAFF_DUMP'])
+        return
+
     pw = (ROOT / 'source' / 'staff_password.txt').read_text(encoding='utf-8').strip()
     salt, iv = os.urandom(16), os.urandom(12)
     key = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=ITER).derive(pw.encode())
