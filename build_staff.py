@@ -247,7 +247,18 @@ def main():
                     v['l'][p - 1], v['r'][p - 1] = '(中学）\n中3-' + c, room
 
     # 中学校の時間割で日ごとに変わったコマ
+    #   特別時間割のない日は、ふだんの時間割を写した日を作って置く（定期考査の日も中学の授業はある。本人 2026-11-12）
+    kousa_days = set()
+    for e in student['events']:
+        if e.get('種類') == '時程' and '考査' in e.get('内容', '') and '全員' in (e.get('対象') or '全員'):
+            x, end = datetime.date.fromisoformat(e['日付']), datetime.date.fromisoformat(e.get('まで') or e['日付'])
+            while x <= end:
+                kousa_days.add(x.isoformat()); x += datetime.timedelta(days=1)
     for (d, n, p), (c, room) in sorted(ch_date.items()):
+        if d not in special and datetime.date.fromisoformat(d).weekday() < 5:
+            wd = datetime.date.fromisoformat(d).weekday()
+            special[d] = {'periods': 7, 'note': '', 'fixed': True, 'src': 'ふだんの時間割',
+                          't': {m: {'l': list(base[m][wd * 7:wd * 7 + 7]), 'r': list(base_rooms[m][wd * 7:wd * 7 + 7])} for m in base}}
         day = special.get(d)
         if not day or n not in day['t'] or p > day['periods']:
             print('  要確認: chugaku.csv の行が特別時間割にない', d, n, p)
@@ -257,8 +268,8 @@ def main():
             if '中学' in v['l'][p - 1]:
                 v['l'][p - 1], v['r'][p - 1] = '', []
             continue
-        if v['l'][p - 1] and '中学' not in v['l'][p - 1]:
-            # 高校の予定と重なるときは両方を並べて出す（本人 2026-10-19）
+        if v['l'][p - 1] and '中学' not in v['l'][p - 1] and d not in kousa_days:
+            # 高校の予定と重なるときは両方を並べて出す（本人 2026-10-19）。考査の日は高校の授業がないので中学で置きかえる
             print('  要確認: 中学の授業が高校の予定と重なる（併記）', d, n, f'{p}限', '中' + c, '／', v['l'][p - 1].replace('\n', ' '))
             v['l'][p - 1] = v['l'][p - 1].replace('\n', ' ') + '／(中学）\n中' + c + '（重なり）'
             if room:
