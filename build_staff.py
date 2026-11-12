@@ -313,12 +313,15 @@ def main():
                     for p in ps:
                         if p > day['periods']:
                             continue
-                        if v['l'][p - 1] and not re.fullmatch(r'\([１２３]年\)|[①-⑨]', v['l'][p - 1]):  # 学年の印（(３年)・① など）は置きかえる
+                        if d in kousa_days and p <= 4:   # 定期考査の監督表：考査の時限は授業がないので置きかえる（中学の授業だけ併記）。index.html が k を見る
+                            v.setdefault('k', []).append(p)
+                        if v['l'][p - 1] and not re.fullmatch(r'\([１２３]年\)|[①-⑨]', v['l'][p - 1]) and not (d in kousa_days and p <= 4 and '中学' not in v['l'][p - 1]):  # 学年の印（(３年)・① など）は置きかえる
                             print('  要確認: 先生ごとの予定が授業と重なる（併記）', d, n, f'{p}限', v['l'][p - 1].replace('\n', ' '))
                             v['l'][p - 1] = v['l'][p - 1].replace('\n', ' ') + '／' + row['内容'].strip() + '（重なり）'
                         else:
                             v['l'][p - 1] = row['内容'].strip()
-                        v['r'][p - 1] = sorted(set(v['r'][p - 1]) | ({row['場所'].strip()} if row.get('場所', '').strip() else set()))
+                        _rm = {row['場所'].strip()} if row.get('場所', '').strip() else set()
+                        v['r'][p - 1] = sorted(_rm if d in kousa_days and p <= 4 and '重なり' not in v['l'][p - 1] else set(v['r'][p - 1]) | _rm)
 
     # ---- 月間行事予定（全部の欄）
     staff_events = {}
