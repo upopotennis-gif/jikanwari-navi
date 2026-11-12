@@ -279,6 +279,36 @@ def main():
         if room:
             v['r'][p - 1] = [room]
 
+    # ---- 3年普通科（3C〜3F）は 11/24〜12/22 が共通テストプレの期間で、ふだんの授業（現代文実践・選択・総合など）はない（本人 2026-11-12）
+    #   特別時間割のない日は、ふだんの時間割を写した日を作り、3C〜3F・ア〜テ選択・(進路実践)・総合３年 のコマを空ける
+    #   （学年の印「(3年)」「③」は会議などなので残す）
+    FW3 = str.maketrans('０１２３４５６７８９ＡＢＣＤＥＦ', '0123456789ABCDEF')
+    KATA3 = set('アイウエオカキサシスセソタチツテ')
+
+    def is_3futsu_class(label):
+        t = re.sub(r'\s', '', label).translate(FW3)
+        if t == '(進路実践)' or '総合3年' in t:
+            return True
+        m = re.search(r'([ア-ン]+)選択', t)
+        if m and set(m.group(1)) & KATA3:
+            return True
+        return any(set(m.group(1)) & set('CDEF') for m in re.finditer(r'3([A-F]+)', t))
+
+    x, end = datetime.date(2026, 11, 24), datetime.date(2026, 12, 22)
+    while x <= end:
+        d = x.isoformat()
+        if x.weekday() < 5:
+            if d not in special:
+                wd = x.weekday()
+                special[d] = {'periods': 7, 'note': '', 'fixed': True, 'src': 'ふだんの時間割',
+                              't': {m: {'l': list(base[m][wd * 7:wd * 7 + 7]), 'r': list(base_rooms[m][wd * 7:wd * 7 + 7])} for m in base}}
+            if special[d].get('src') == 'ふだんの時間割':
+                for v in special[d]['t'].values():
+                    for i, lab in enumerate(v['l']):
+                        if lab and '中学' not in lab and is_3futsu_class(lab):
+                            v['l'][i], v['r'][i] = '', []
+        x += datetime.timedelta(days=1)
+
     # ---- 先生ごとの予定（教科会など）: source/staff_yotei.csv（先生の名前が入るので公開しない。本人 2026-10-29）
     #   列: 日付, 先生（空白区切りで複数）, 時限（2 や 5-7）, 内容, 場所
     #   特別時間割のない日は、ふだんの時間割を写した日を作って置きかえる
