@@ -182,7 +182,7 @@ footer p{margin:6px 0}
   </div></div>
 </div>
 
-<script src="data.js?v=66af31d134"></script>
+<script src="data.js?v=9ee56694c4"></script>
 <script>
 (() => {
 const D = window.DATA;
@@ -221,6 +221,10 @@ function color(s){
 
 // ---------- 予定のあて先
 function cls(){ return prof && D.classes[prof.cls]; }
+// ふだんの時間割は途中で変わる（D.base2.from の日から新しい時間割）
+function slotsOf(cid, ds){ const b = D.base2; return (b && ds >= b.from && b.classes[cid]) ? b.classes[cid] : D.classes[cid].slots; }
+// 設定の画面（選択科目・班）は、切り替わる1週間前から新しい時間割で聞く
+function nowSlots(cid){ const d = new Date(); d.setDate(d.getDate()+7); return slotsOf(cid, iso(d)); }
 function targets(){
   const c = cls(); if(!c) return [];
   const code = prof.cls.slice(0,2);
@@ -280,7 +284,7 @@ function dayPlan(d){
     const hasRep = mine.some(e => e['種類']==='差し替え');
     if(!spSlots || (!spSlots.some(Boolean) && !hasRep)){ plan.off = plan.notes.length ? 'この日は授業がありません' : '特別時間割で授業がありません'; return plan; } }
   for(let p=1; p<=(sp ? sp.periods : 7); p++){
-    const slot = sp ? spSlots[p-1] : c.slots[(wd-1)*7 + (p-1)];
+    const slot = sp ? spSlots[p-1] : slotsOf(prof.cls, ds)[(wd-1)*7 + (p-1)];
     const tm = times.find(t => String(t.p)===String(p));
     const item = { p, time: tm ? tm.start+'〜'+tm.end : '', start: tm && tm.start, end: tm && tm.end };
     Object.assign(item, resolve(slot));
@@ -505,8 +509,8 @@ function openSheet(){
 function closeSheet(){ document.getElementById('sheet').classList.remove('open'); document.body.style.overflow = ''; }
 
 function classNeeds(cid){
-  const c = D.classes[cid]; const blocks = [], groups = {};
-  c.slots.forEach(s => {
+  const blocks = [], groups = {};
+  nowSlots(cid).forEach(s => {
     if(!s) return;
     if(s.block){ if(!blocks.includes(s.block)) blocks.push(s.block);
       const pick = draft.choices[s.block];
@@ -560,14 +564,14 @@ function drawSheet(){
   document.getElementById('saveBtn').disabled = !draft.cls;
 }
 function whenOf(cid, test){
-  const c = D.classes[cid]; const out = [];
-  c.slots.forEach((s,i) => { if(test(s)){ const d = '月火水木金'[Math.floor(i/7)]; const last = out.at(-1); const p = i%7+1;
+  const out = [];
+  nowSlots(cid).forEach((s,i) => { if(test(s)){ const d = '月火水木金'[Math.floor(i/7)]; const last = out.at(-1); const p = i%7+1;
     if(last && last.d===d && last.b===p-1){ last.b = p; } else out.push({d, a:p, b:p}); } });
   return out.map(x => x.d + (x.a===x.b ? x.a : x.a+'・'+x.b)).join('　');
 }
 function groupRooms(cid, s){
-  const c = D.classes[cid]; const seen = new Map();
-  c.slots.forEach(x => {
+  const seen = new Map();
+  nowSlots(cid).forEach(x => {
     let rooms = null;
     if(x && !x.block && x.s===s) rooms = x.rooms;
     if(x && x.block && x.rooms[s]) rooms = x.rooms[s];

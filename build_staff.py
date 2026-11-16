@@ -16,7 +16,7 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 
 from tokubetsu import parse_pdf
-from build import LHR_ROOM
+from build import LHR_ROOM, BASE2_FROM, BASE2_DIR
 from kakutei import parse_rooms
 from invert import parse_label
 
@@ -183,6 +183,52 @@ def main():
     base_rooms = {n: [chugaku_fix(n, base[n][i], i // 7, i % 7 + 1, lhr_fix(base[n][i], base_room(n, i)), by_slot.get(i, {})) for i in range(35)] for n in base}
     base = {n: [chugaku_label(n, l, i // 7, i % 7 + 1) for i, l in enumerate(labs)] for n, labs in base.items()}
 
+    # ---- 途中で変わったふだんの時間割（11/24〜。source/base2/ の教員版・教室配当。build.py の base2 と同じ資料）
+    b2 = student.get('base2')
+    base2 = base_rooms2 = None
+    used2 = {}
+    if b2 and (BASE2_DIR / '教員版.pdf').exists():
+        week = parse_pdf(BASE2_DIR / '教員版.pdf', weekly=True)[0]
+        rw = parse_rooms(BASE2_DIR / '教室配当.pdf', weekly=True) if (BASE2_DIR / '教室配当.pdf').exists() else {}
+        by_slot2 = {}
+        for di, dn in enumerate('月火水木金'):
+            for p, lst in rw.get(dn, {}).items():
+                for room, lab in lst:
+                    by_slot2.setdefault(di * 7 + p - 1, {}).setdefault(norm(lab), []).append(room)
+                    used2.setdefault(di * 7 + p - 1, set()).add(room)
+        base2 = {n: [''] * 35 for n in base}
+        for di, dn in enumerate('月火水木金'):
+            for n, cells in week.get(dn, {}).get('teachers', {}).items():
+                n = RENAME.get(n, n)
+                if n not in base2:
+                    print('  要確認: 11/24〜の時間割の名前が一覧にない', n)
+                    continue
+                for p, lab in cells.items():
+                    base2[n][di * 7 + p - 1] = lab
+        for n in {k[0] for k in ch_week}:
+            if n not in base2:
+                continue
+            for i in range(35):
+                mine = (n, i // 7, i % 7 + 1) in ch_week
+                if mine and not base2[n][i]:
+                    base2[n][i] = '(中学）'
+                elif mine and '中学' not in base2[n][i]:
+                    print('  要確認: 11/24〜の時間割で中学のコマが高校の授業と重なる', n, '月火水木金'[i // 7], i % 7 + 1, base2[n][i].replace('\n', ' '))
+                elif not mine and '中学' in base2[n][i]:
+                    base2[n][i] = ''
+
+        def room2(n, i):
+            lab = base2[n][i]
+            r = sorted(set(by_slot2.get(i, {}).get(norm(lab), []))) if lab else []
+            return r or from_class(lab, lambda c: b2['classes'][c][i])
+
+        base_rooms2 = {n: [chugaku_fix(n, base2[n][i], i // 7, i % 7 + 1, lhr_fix(base2[n][i], room2(n, i)), by_slot2.get(i, {})) for i in range(35)] for n in base2}
+        base2 = {n: [chugaku_label(n, l, i // 7, i % 7 + 1) for i, l in enumerate(labs)] for n, labs in base2.items()}
+
+    def base_on(d):
+        """その日のふだんの時間割（先生ごとの表記・教室）"""
+        return (base2, base_rooms2) if base2 and d >= BASE2_FROM else (base, base_rooms)
+
     # ---- 特別時間割（教員版）
     special = {}
     names = {t['name'] for t in teachers}
@@ -257,8 +303,9 @@ def main():
     for (d, n, p), (c, room) in sorted(ch_date.items()):
         if d not in special and datetime.date.fromisoformat(d).weekday() < 5:
             wd = datetime.date.fromisoformat(d).weekday()
+            _b, _r = base_on(d)
             special[d] = {'periods': 7, 'note': '', 'fixed': True, 'src': 'ふだんの時間割',
-                          't': {m: {'l': list(base[m][wd * 7:wd * 7 + 7]), 'r': list(base_rooms[m][wd * 7:wd * 7 + 7])} for m in base}}
+                          't': {m: {'l': list(_b[m][wd * 7:wd * 7 + 7]), 'r': list(_r[m][wd * 7:wd * 7 + 7])} for m in _b}}
         day = special.get(d)
         if not day or n not in day['t'] or p > day['periods']:
             print('  要確認: chugaku.csv の行が特別時間割にない', d, n, p)
@@ -300,8 +347,9 @@ def main():
         if x.weekday() < 5:
             if d not in special:
                 wd = x.weekday()
+                _b, _r = base_on(d)
                 special[d] = {'periods': 7, 'note': '', 'fixed': True, 'src': 'ふだんの時間割',
-                              't': {m: {'l': list(base[m][wd * 7:wd * 7 + 7]), 'r': list(base_rooms[m][wd * 7:wd * 7 + 7])} for m in base}}
+                              't': {m: {'l': list(_b[m][wd * 7:wd * 7 + 7]), 'r': list(_r[m][wd * 7:wd * 7 + 7])} for m in _b}}
             if special[d].get('src') == 'ふだんの時間割':
                 for v in special[d]['t'].values():
                     for i, lab in enumerate(v['l']):
@@ -326,8 +374,9 @@ def main():
                     if wd > 4:
                         print('  要確認: staff_yotei.csv の日が土日', d)
                         continue
+                    _b, _r = base_on(d)
                     special[d] = {'periods': 7, 'note': '', 'fixed': True, 'src': 'ふだんの時間割',
-                                  't': {n: {'l': base[n][wd * 7:wd * 7 + 7], 'r': base_rooms[n][wd * 7:wd * 7 + 7]} for n in base}}
+                                  't': {n: {'l': _b[n][wd * 7:wd * 7 + 7], 'r': _r[n][wd * 7:wd * 7 + 7]} for n in _b}}
                 day = special[d]
                 for n in row['先生'].split():
                     n = RENAME.get(n, n)
@@ -368,6 +417,10 @@ def main():
         'rooms': rooms_list, 'special': special, 'staffEvents': staff_events,
         'events': student['events'], 'jitei': student['jitei'], 'ready': student.get('ready', []),
     }
+
+    if base2:
+        payload['base2'] = {'from': BASE2_FROM, 'base': base2, 'baseRooms': base_rooms2,
+                            'used': {str(i): sorted(v) for i, v in used2.items()}}
 
     # 共テプレの「監督・空き一覧」（~/kyotepure-jikanwari/aki.py）用に、暗号化せずに書き出すだけ（公開しない場所へ）
     if os.environ.get('STAFF_DUMP'):

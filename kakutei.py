@@ -4,10 +4,11 @@ import re, statistics
 import fitz
 
 
-def parse_rooms(path, year=2026):
+def parse_rooms(path, year=2026, weekly=False):
+    """weekly=True … 見出しが曜日（月〜金）の全体時間割の教室配当。日付の代わりに '月' などを鍵にする"""
     page = fitz.open(path)[0]
     words = page.get_text('words')
-    heads = sorted([w for w in words if re.match(r'\d{1,2}/\d{1,2}\(', w[4])], key=lambda w: w[0])
+    heads = sorted([w for w in words if (re.fullmatch(r'[月火水木金]', w[4]) and w[1] < 100 if weekly else re.match(r'\d{1,2}/\d{1,2}\(', w[4]))], key=lambda w: w[0])
     hy = max(w[3] for w in heads)
     nums = sorted([w for w in words if hy < w[1] < hy + 40 and re.fullmatch(r'[1-7]', w[4])], key=lambda w: w[0])
     ny = statistics.median(w[1] for w in nums)
@@ -21,7 +22,7 @@ def parse_rooms(path, year=2026):
     cols = []
     for g, h in zip(groups, heads):
         m = re.match(r'(\d{1,2})/(\d{1,2})', h[4])
-        date = f'{year}-{int(m.group(1)):02d}-{int(m.group(2)):02d}'
+        date = h[4] if weekly else f'{year}-{int(m.group(1)):02d}-{int(m.group(2)):02d}'
         cols += [((w[0] + w[2]) / 2, date, int(w[4])) for w in g]
     left = min(c[0] for c in cols) - 15
     right = max(c[0] for c in cols) + 15

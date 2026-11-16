@@ -3,7 +3,8 @@ import re, statistics
 import fitz
 
 
-def parse_pdf(path, year=2026):
+def parse_pdf(path, year=2026, weekly=False):
+    """weekly=True … 見出しが日付でなく曜日（月〜金）の全体時間割。日付の代わりに '月' などを鍵にする"""
     page = fitz.open(path)[0]
     words = page.get_text('words')
     hy = next(w[1] for w in words if w[4] == '分掌')
@@ -14,13 +15,16 @@ def parse_pdf(path, year=2026):
             groups.append(cur); cur = []
         cur.append(w)
     groups.append(cur)
-    heads = [w for w in words if hy - 14 < w[1] < hy - 3 and re.match(r'\d{1,2}/\d{1,2}\(', w[4])]
+    heads = [w for w in words if hy - 14 < w[1] < hy - 3 and (re.fullmatch(r'[月火水木金]', w[4]) if weekly else re.match(r'\d{1,2}/\d{1,2}\(', w[4]))]
     days = []
     for g in groups:
         gs, ge = g[0][0], g[-1][2]
         cand = [h for h in heads if gs - 30 <= h[0] <= ge]
         c = (gs + ge) / 2
         h = min(cand, key=lambda h: abs(h[0] - c))
+        if weekly:
+            days.append({'date': h[4], 'note': '', 'cols': [((w[0] + w[2]) / 2, int(w[4])) for w in g]})
+            continue
         m = re.match(r'(\d{1,2})/(\d{1,2})\(.\)\s*(.*)', h[4])
         date = f'{year}-{int(m.group(1)):02d}-{int(m.group(2)):02d}'
         days.append({'date': date, 'note': re.sub(r'\s+', ' ', m.group(3).replace('　', ' ')).strip(),

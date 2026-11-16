@@ -11,7 +11,7 @@ source/ は公開しない（先生の名前が入っているため）。
 import csv, json, re, sys, datetime, pathlib
 import openpyxl
 from collections import Counter
-from invert import invert, ALIAS
+from invert import invert, ALIAS, COURSE_ONLY
 from tokubetsu import parse_pdf
 from kakutei import parse_rooms
 
@@ -34,6 +34,7 @@ def oneline(s):
 def norm(s):
     return oneline(s).translate(FW).replace(' ', '')
 
+FWL = str.maketrans('ＬＨＲ', 'LHR')
 GROUP = {'①': 1, '②': 2, '③': 3}
 
 # ---------------------------------------------------------------- クラス
@@ -374,6 +375,93 @@ def build_special(classes, warn):
     return special
 
 
+# ---------------------------------------------------------------- 途中で変わったふだんの時間割
+# 第3回定期考査以降（11/24〜）の全体時間割。PDF 3点を source/base2/ に置く（教員版.pdf・教室配当.pdf・ルーム掲示用.pdf）。
+# 教員版をクラスごとに組み直し、教室は教室配当から引く（ルーム掲示用は照合用）。BASE2_FROM より前の日は jikanwari.xlsx のまま
+BASE2_FROM = '2026-11-24'
+BASE2_DIR = ROOT / 'source' / 'base2'
+# 3年は特別授業（共テプレ・国試対策。中身は 予定.csv で入れる）
+BASE2_FILL = {'3B': ('福祉科特別授業', '学科の予定表のとおり'), '3C': ('普通科特別授業', '学年の予定表のとおり'),
+              '3D': ('普通科特別授業', '学年の予定表のとおり'), '3E': ('普通科特別授業', '学年の予定表のとおり'),
+              '3F': ('普通科特別授業', '学年の予定表のとおり')}
+SENMON = {'1A', '1B', '2A', '2B', '3A服飾', '3A食物', '3B'}   # 火7 なし
+
+
+def build_base2(classes, warn):
+    """→ {クラスid: [35コマ]}。資料がなければ None"""
+    tpdf, rpdf = BASE2_DIR / '教員版.pdf', BASE2_DIR / '教室配当.pdf'
+    if not tpdf.exists():
+        return None
+    week = parse_pdf(tpdf, weekly=True)[0]
+    rooms_w = parse_rooms(rpdf, weekly=True) if rpdf.exists() else {}
+    out = {cid: [None] * 35 for cid in classes}
+    for di, dname in enumerate(DAYS):
+        day = week.get(dname)
+        if not day:
+            warn.append(f'11/24〜の時間割: {dname}曜が読めない')
+            continue
+        fx = rooms_w.get(dname, {})
+        inv = invert(day['labels'])
+
+        def look(p, test):
+            return [list(h) for h in lookup_assigned({0: fx.get(p, [])}, 0, test)]
+
+        for cid in classes:
+            if cid in BASE2_FILL:
+                continue
+            code = re.sub(r'[^0-9A-F]', '', cid.translate(FW))[:2]
+            base_names = {e['s'] for e in classes[cid]['slots'] if e and 'block' not in e}
+            other = [norm(x)[:2] for x in COURSE_ONLY.get(cid, ('', ()))[1]]
+            for p, ent in inv.get(cid, {}).items():
+                if ent[0] == 'block':
+                    blk = ent[1]
+                    if blk not in BLOCKS:
+                        continue
+                    tag = norm(BLOCKS[blk]['tag'])
+                    rooms = {}
+                    for o in BLOCKS[blk]['options']:
+                        key = norm(o['key'])
+                        rooms[o['name']] = look(p, lambda n: key in n and (tag in n or blk == '芸術')) or [[0, o['room']]]
+                    out[cid][di * 7 + p - 1] = {'block': blk, 'rooms': rooms}
+                    continue
+                names = [x.split('|')[0] for x in ent[1]]
+                names = list(dict.fromkeys(next((b for b in base_names if bare(b) == bare(n)), n) if n not in base_names else n for n in names))
+                note = 'Ⅱ選択' if any('|Ⅱ選択' in x for x in ent[1]) else ''
+                key = norm(names[0])[:2]
+                ok = lambda n: code in n and ('選択' not in n or 'Ⅱ選択' in n)
+                if names[0] in ('ＬＨＲ', 'LHR'):
+                    hit = look(p, lambda n: code in n and 'LHR' in n.translate(FWL))
+                elif names[0] == '総合':
+                    hit = []
+                else:
+                    hit = look(p, lambda n: ok(n) and n.startswith(key))
+                    if not hit:
+                        hit = look(p, lambda n: ok(n) and 'LHR' not in n.translate(FWL) and '総合' not in n and n[:2] not in other)
+                        if len(hit) > 1 and len({h[0] for h in hit}) == 1:
+                            hit = []
+                if not hit:
+                    hit = [[0, '体育施設' if names[0] in ('体育', '生涯スポーツ') else '学年の指示どおり' if names[0] == '総合' else 'いつもの教室']]
+                e = {'s': ' / '.join(names), 'rooms': hit}
+                if note:
+                    e['note'] = note
+                if len(hit) > 1 and all(r[0] for r in hit):
+                    e['split'] = True
+                if len(names) > 1 and e['s'] not in base_names:
+                    e['conflict'] = True
+                    warn.append(f'11/24〜の時間割 {cid} {dname}{p}: 重なり {e["s"]}')
+                out[cid][di * 7 + p - 1] = e
+    for cid, (subj, room) in BASE2_FILL.items():
+        if cid in out:
+            out[cid] = [None if (cid in SENMON and i == 13) else {'s': subj, 'rooms': [[0, room]]} for i in range(35)]
+    for cid, slots in out.items():
+        for di in range(5):
+            f = [i for i in range(7) if slots[di * 7 + i]]
+            gaps = [i + 1 for i in range(f[0], f[-1]) if not slots[di * 7 + i]] if f else ['全部']
+            if gaps:
+                warn.append(f'11/24〜の時間割 {cid} {DAYS[di]}: {gaps}限が空き')
+    return out
+
+
 # ---------------------------------------------------------------- 予定・時程
 def read_csv(name):
     p = ROOT / name
@@ -400,8 +488,11 @@ def main():
     classes, blocks = build_timetable(wb, warn)
     warn[:] = [w for w in warn if not any(w.startswith(f'{c} 金7 ＬＨＲ') for c in LHR_ROOM)]
     special = build_special(classes, warn)
+    base2 = build_base2(classes, warn)
     for cid, c in classes.items():
         fix_lhr(c['slots'], cid)
+    for cid, slots in (base2 or {}).items():
+        fix_lhr(slots, cid)
     for day in special.values():
         for cid, slots in day['classes'].items():
             fix_lhr(slots, cid)
@@ -433,6 +524,8 @@ def main():
         'special': special,
         'ready': sorted(ready),
     }
+    if base2:
+        data['base2'] = {'from': BASE2_FROM, 'classes': base2}
     js = 'window.DATA = ' + json.dumps(data, ensure_ascii=False, separators=(',', ':')) + ';\n'
     (ROOT / 'data.js').write_text(js, encoding='utf-8')
     # 更新がすぐ届くよう、index.html の読みこみに版の印をつける（キャッシュ対策）
@@ -448,9 +541,13 @@ def main():
 def show(ids):
     """確認用: python3 build.py --show 3C 2E"""
     d = json.loads((ROOT / 'data.js').read_text(encoding='utf-8')[len('window.DATA = '):-2])
+    new = '--new' in ids   # --new … 11/24〜の時間割を出す
+    ids = [a for a in ids if a != '--new']
     for cid in ids or d['classes']:
-        c = d['classes'][cid]
-        print('=====', cid, c['label'])
+        c = dict(d['classes'][cid])
+        if new:
+            c['slots'] = d['base2']['classes'][cid]
+        print('=====', cid, c['label'], '（' + d['base2']['from'] + '〜）' if new else '')
         for di in range(5):
             row = []
             for p in range(7):
