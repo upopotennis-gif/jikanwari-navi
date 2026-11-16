@@ -409,6 +409,15 @@ def main():
         month = int(m.group(1))
         year = 2026 if month >= 4 else 2027
         staff_events.update(gyouji_pdf.parse(pdf, year, month))
+    # 月間がまだ出ていない月は、年間行事予定（1〜3月・教員用）の案から（source/nenkan_*.pdf。月間を入れたらそちらが勝つ）
+    import nenkan_pdf
+    for pdf in sorted((ROOT / 'source').glob('nenkan_*.pdf')):
+        for r in nenkan_pdf.parse(pdf):
+            if r['d'] in staff_events or f"gyouji_{r['d'][5:7]}" in ' '.join(x.stem for x in (ROOT / 'source').glob('gyouji_*.pdf')):
+                continue
+            day = [['学校行事', t] for t in r['ev']] + [['諸会議・研修', gyouji_pdf.ABBR.get(a, a)] for a in r['ab']]
+            if day:
+                staff_events[r['d']] = day
 
     payload = {
         'year': student['year'], 'updated': datetime.date.today().isoformat(),
