@@ -364,6 +364,10 @@ def main():
     if _sf.exists():
         with open(_sf, encoding='utf-8') as f:
             for row in csv.DictReader(f):
+                # 共テプレの担当（メモが「共テプレ」で始まる行。~/kyotepure-jikanwari/navi.py が入れる）は、
+                # 監督表を組み直すための書き出し（STAFF_DUMP）には入れない（自分の担当で「空いていない」にならないように。2026-11-19）
+                if os.environ.get('STAFF_DUMP') and (row.get('メモ') or '').startswith('共テプレ'):
+                    continue
                 d = row['日付'].strip()
                 wd = datetime.date.fromisoformat(d).weekday()
                 # 時限は 2 や 5-7。「放課後」は7限のあとの欄に出す（模試の監督など。2026-10-30）
