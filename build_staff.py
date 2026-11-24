@@ -15,7 +15,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 
-from tokubetsu import parse_pdf
+from tokubetsu import parse_pdf, src_label
 from build import LHR_ROOM, BASE2_FROM, BASE2_DIR
 from kakutei import parse_rooms
 from invert import parse_label
@@ -258,7 +258,7 @@ def main():
                 labs = [chugaku_label(n, l, wd, p + 1) for p, l in enumerate(labs)]
                 per[n] = {'l': labs, 'r': rs}
             special[date] = {'periods': day['periods'], 'note': day['note'], 'fixed': date in fixed, 't': per,
-                             'src': '修学旅行特別時間割 ' + pdf.stem + ('（確定）' if date in fixed else '（第1案）')}
+                             'src': src_label(pdf.stem, date in fixed)}
 
     # 特別時間割の日も、中学の授業は中学校の時間割（chugaku.csv の曜日の行）どおりに置く。
     # 模試などの裏でも中学の授業はあるので、高校の教員版の「(中学）」の有無には頼らない（本人 2026-10-30）

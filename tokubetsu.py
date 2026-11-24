@@ -2,11 +2,24 @@
 import re, statistics
 import fitz
 
+import json, pathlib
+# 教員版PDFの誤りを消す（日付, 先生, 時限）。先生の名前が入るので source/tokubetsu_drop.json（公開しない）に書く
+_DF = pathlib.Path(__file__).parent / 'source' / 'tokubetsu_drop.json'
+DROP = {tuple(x[:3]) for x in json.loads(_DF.read_text(encoding='utf-8'))} if _DF.exists() else set()
+# 特別時間割の名前（ファイル名 → 表示名, 案）。ないものは「修学旅行特別時間割」
+TITLE = {'11-4': ('11/30・12/1 特別時間割', '第1案')}
+
+
+def src_label(stem, fixed):
+    name, an = TITLE.get(stem, ('修学旅行特別時間割 ' + stem, None))
+    return f"{name}（{an or ('確定' if fixed else '第1案')}）"
+
 
 def parse_pdf(path, year=2026, weekly=False):
     """weekly=True … 見出しが日付でなく曜日（月〜金）の全体時間割。日付の代わりに '月' などを鍵にする"""
     page = fitz.open(path)[0]
-    words = page.get_text('words')
+    Z = str.maketrans('０１２３４５６７８９', '0123456789')
+    words = [w[:4] + (re.sub(r'^(\d{1,2})月(\d{1,2})日', r'\1/\2', w[4].translate(Z)) if re.match(r'[0-9０-９]{1,2}月[0-9０-９]{1,2}日', w[4]) else w[4],) + w[5:] for w in page.get_text('words')]   # 見出し「12月１日(火)」→「12/1(火)」（2026-11-24）
     hy = next(w[1] for w in words if w[4] == '分掌')
     nums = sorted([w for w in words if abs(w[1] - hy) < 2 and re.fullmatch(r'[1-7]', w[4])], key=lambda w: w[0])
     groups, cur = [], []
@@ -64,6 +77,11 @@ def parse_pdf(path, year=2026, weekly=False):
         o = out[days[di]['date']]
         o['labels'].append((p, lab))
         o['teachers'].setdefault(names.get(r, '?'), {})[p] = lab
+    for date, name, p in DROP:
+        t = out.get(date, {}).get('teachers', {})
+        if name in t and p in t[name]:
+            lab = t[name].pop(p)
+            out[date]['labels'].remove((p, lab))
     return out, gap, len(rows)
 
 

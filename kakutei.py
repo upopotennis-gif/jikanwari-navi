@@ -7,8 +7,9 @@ import fitz
 def parse_rooms(path, year=2026, weekly=False):
     """weekly=True … 見出しが曜日（月〜金）の全体時間割の教室配当。日付の代わりに '月' などを鍵にする"""
     page = fitz.open(path)[0]
-    words = page.get_text('words')
-    heads = sorted([w for w in words if (re.fullmatch(r'[月火水木金]', w[4]) and w[1] < 100 if weekly else re.match(r'\d{1,2}/\d{1,2}\(', w[4]))], key=lambda w: w[0])
+    Z = str.maketrans('０１２３４５６７８９', '0123456789')
+    words = [w[:4] + (w[4].translate(Z) if re.match(r'[0-9０-９]{1,2}月', w[4]) else w[4],) + w[5:] for w in page.get_text('words')]   # 見出しが「12月１日(火)」の形のとき（2026-11-24）
+    heads = sorted([w for w in words if (re.fullmatch(r'[月火水木金]', w[4]) and w[1] < 100 if weekly else re.match(r'\d{1,2}(/|月)\d{1,2}日?\(', w[4]))], key=lambda w: w[0])
     hy = max(w[3] for w in heads)
     nums = sorted([w for w in words if hy < w[1] < hy + 40 and re.fullmatch(r'[1-7]', w[4])], key=lambda w: w[0])
     ny = statistics.median(w[1] for w in nums)
@@ -21,7 +22,7 @@ def parse_rooms(path, year=2026, weekly=False):
     groups.append(cur)
     cols = []
     for g, h in zip(groups, heads):
-        m = re.match(r'(\d{1,2})/(\d{1,2})', h[4])
+        m = re.match(r'(\d{1,2})[/月](\d{1,2})', h[4])
         date = h[4] if weekly else f'{year}-{int(m.group(1)):02d}-{int(m.group(2)):02d}'
         cols += [((w[0] + w[2]) / 2, date, int(w[4])) for w in g]
     left = min(c[0] for c in cols) - 15
@@ -45,7 +46,10 @@ def parse_rooms(path, year=2026, weekly=False):
     out = {}
     for (room, date, p), ws in cells.items():
         ws.sort(key=lambda w: (round(w[1]), w[0]))
-        out.setdefault(date, {}).setdefault(p, []).append((room, '\n'.join(w[4] for w in ws)))
+        lab = '\n'.join(w[4] for w in ws)
+        if not weekly:
+            lab = re.sub(r'^精選', '数学精選', lab)   # 教室配当は「精選ＢＣ」、教員版は「数学精選ＢＣ」（2026-11-24）
+        out.setdefault(date, {}).setdefault(p, []).append((room, lab))
     return out
 
 

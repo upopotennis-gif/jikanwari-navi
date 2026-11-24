@@ -12,7 +12,7 @@ import csv, json, re, sys, datetime, pathlib
 import openpyxl
 from collections import Counter
 from invert import invert, ALIAS, COURSE_ONLY
-from tokubetsu import parse_pdf
+from tokubetsu import parse_pdf, src_label
 from kakutei import parse_rooms
 
 ROOT = pathlib.Path(__file__).parent
@@ -371,7 +371,7 @@ def build_special(classes, warn):
                         warn.append(f'特別 {date} {cid}: {gaps}限が空き')
                 per[cid] = slots
             special[date] = {'periods': day['periods'], 'classes': per, 'fixed': date in fixed,
-                             'src': '修学旅行特別時間割 ' + pdf.stem + ('（確定）' if date in fixed else '（第1案）')}
+                             'src': src_label(pdf.stem, date in fixed)}
     return special
 
 
