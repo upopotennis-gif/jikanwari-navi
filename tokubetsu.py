@@ -7,7 +7,7 @@ import json, pathlib
 _DF = pathlib.Path(__file__).parent / 'source' / 'tokubetsu_drop.json'
 DROP = {tuple(x[:3]) for x in json.loads(_DF.read_text(encoding='utf-8'))} if _DF.exists() else set()
 # 特別時間割の名前（ファイル名 → 表示名, 案）。ないものは「修学旅行特別時間割」
-TITLE = {'11-4': ('11/30・12/1 特別時間割', '第1案')}
+TITLE = {'11-4': ('11/30・12/1 特別時間割', '確定')}
 
 
 def src_label(stem, fixed):
